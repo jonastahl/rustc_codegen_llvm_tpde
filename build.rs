@@ -379,17 +379,9 @@ fn main() {
         println!("cargo:rustc-link-lib=static:-bundle=pthread");
     }
 
-    // Build TPDE
-    // Not every LLVM distribution (e.g. rustc's ci-llvm) ships CMake config files, so allow
-    // pointing TPDE at a different LLVM CMake directory of the same version.
-    let llvm_cmake_dir = match tracked_env_var_os("TPDE_LLVM_DIR") {
-        Some(dir) => dir.into_string().unwrap(),
-        None => {
-            let mut cmd = Command::new(&llvm_config);
-            cmd.arg("--cmakedir");
-            output(&mut cmd)
-        }
-    };
+    // Build TPDE against the same LLVM installation, using its clang as compiler.
+    let llvm_cmake_dir = output(Command::new(&llvm_config).arg("--cmakedir"));
+    let llvm_bin_dir = PathBuf::from(output(Command::new(&llvm_config).arg("--bindir")).trim());
     #[cfg(debug_assertions)]
     let build_type = "DEBUG";
     #[cfg(not(debug_assertions))]
@@ -399,8 +391,10 @@ fn main() {
     let tpde_dst = cmake::Config::new("tpde")
         .define("CMAKE_BUILD_RPATH", llvm_lib_dir.trim())
         .define("LLVM_DIR", llvm_cmake_dir.trim())
-        .define("CMAKE_CXX_COMPILER", "clang++")
-        .define("CMAKE_C_COMPILER", "clang")
+        // The LLVM pass plugin isn't needed here.
+        .define("TPDE_ENABLE_LLVM_PLUGIN", "OFF")
+        .define("CMAKE_CXX_COMPILER", llvm_bin_dir.join("clang++"))
+        .define("CMAKE_C_COMPILER", llvm_bin_dir.join("clang"))
         .define("CMAKE_BUILD_TYPE", build_type)
         .generator("Ninja")
         .build();

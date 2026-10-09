@@ -1,0 +1,4 @@
+[submodule "llvm"]
+	path = deps/llvm
+	url = https://github.com/rust-lang/llvm-project.git
+	shallow = true
