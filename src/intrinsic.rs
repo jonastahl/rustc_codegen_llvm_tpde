@@ -574,7 +574,10 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                         // For rusty ABIs, small aggregates are actually passed
                         // as `RegKind::Integer` (see `FnAbi::adjust_for_abi`),
                         // so we re-use that same threshold here.
+
+                        // TODO (mj): support integer compare for non power-of-2 widths
                         layout.size() <= self.data_layout().pointer_size() * 2
+                            && layout.size().bits().is_power_of_two()
                     }
                 };
 

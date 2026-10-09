@@ -11,8 +11,48 @@
 #![feature(iter_intersperse)]
 #![feature(macro_derive)]
 #![feature(once_cell_try)]
+#![feature(rustc_private)]
 #![feature(trim_prefix_suffix)]
 #![feature(try_blocks)]
+// tidy-alphabetical-end
+
+// tidy-alphabetical-start
+extern crate rustc_abi;
+extern crate rustc_ast;
+extern crate rustc_codegen_ssa;
+extern crate rustc_crate_store;
+extern crate rustc_data_structures;
+extern crate rustc_errors;
+extern crate rustc_fs_util;
+extern crate rustc_hashes;
+extern crate rustc_hir;
+extern crate rustc_index;
+extern crate rustc_llvm;
+extern crate rustc_macros;
+extern crate rustc_metadata;
+extern crate rustc_middle;
+extern crate rustc_sanitizers;
+extern crate rustc_session;
+extern crate rustc_span;
+extern crate rustc_symbol_mangling;
+extern crate rustc_target;
+// tidy-alphabetical-end
+
+// This prevents duplicating functions and statics that are already part of the host rustc process.
+#[allow(unused_extern_crates)]
+extern crate rustc_driver;
+
+// tidy-alphabetical-start
+extern crate bitflags;
+extern crate gimli;
+extern crate itertools;
+extern crate libc;
+extern crate libloading;
+extern crate measureme;
+extern crate object;
+extern crate rustc_demangle;
+extern crate smallvec;
+extern crate tracing;
 // tidy-alphabetical-end
 
 use std::any::Any;
@@ -220,6 +260,10 @@ impl CodegenBackend for LlvmCodegenBackend {
     }
 
     fn init(&self, sess: &Session) {
+        if !(sess.opts.optimize == OptLevel::No || sess.opts.optimize == OptLevel::Less) {
+            sess.dcx()
+                .fatal("Optimization levels greater than 1 are not supported by the TPDE backend.")
+        }
         llvm_util::init(sess); // Make sure llvm is inited
 
         // autodiff is based on Enzyme, a library which we might not have available, when it was
@@ -527,4 +571,9 @@ impl Drop for ModuleLlvm {
             llvm::LLVMContextDispose(&mut *(self.llcx as *mut _));
         }
     }
+}
+
+#[unsafe(no_mangle)]
+pub fn __rustc_codegen_backend() -> Box<dyn CodegenBackend> {
+    LlvmCodegenBackend::new()
 }

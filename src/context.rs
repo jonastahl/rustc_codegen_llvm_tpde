@@ -543,8 +543,7 @@ pub(crate) unsafe fn create_module<'ll>(
     // On the wasm targets it will get hooked up to the "producer" sections
     // `processed-by` information.
     #[allow(clippy::option_env_unwrap)]
-    let rustc_producer =
-        format!("rustc version {}", option_env!("CFG_VERSION").expect("CFG_VERSION"));
+    let rustc_producer = format!("rustc_codegen_tpde version {}", env!("CARGO_PKG_VERSION"));
 
     let name_metadata = cx.create_metadata(rustc_producer.as_bytes());
     cx.module_add_named_metadata_node(llmod, c"llvm.ident", &[name_metadata]);

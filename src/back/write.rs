@@ -52,14 +52,11 @@ pub(crate) fn llvm_err<'a>(dcx: DiagCtxtHandle<'_>, err: LlvmError<'a>) -> ! {
 
 fn write_output_file<'ll>(
     dcx: DiagCtxtHandle<'_>,
-    target: &'ll llvm::TargetMachine,
-    no_builtins: bool,
     m: &'ll llvm::Module,
     output: &Path,
     dwo_output: Option<&Path>,
     file_type: llvm::FileType,
     self_profiler_ref: &SelfProfilerRef,
-    verify_llvm_ir: bool,
 ) {
     debug!("write_output_file output={:?} dwo_output={:?}", output, dwo_output);
     let output_c = path_to_c_string(output);
@@ -70,20 +67,8 @@ fn write_output_file<'ll>(
     } else {
         std::ptr::null()
     };
-    let result = unsafe {
-        let pm = llvm::LLVMCreatePassManager();
-        llvm::LLVMAddAnalysisPasses(target, pm);
-        llvm::LLVMRustAddLibraryInfo(target, pm, m, no_builtins);
-        llvm::LLVMRustWriteOutputFile(
-            target,
-            pm,
-            m,
-            output_c.as_ptr(),
-            dwo_output_ptr,
-            file_type,
-            verify_llvm_ir,
-        )
-    };
+    let result =
+        unsafe { llvm::LLVMRustWriteOutputFile(m, output_c.as_ptr(), dwo_output_ptr, file_type) };
 
     // Record artifact sizes for self-profiling
     if result == llvm::LLVMRustResult::Success {
@@ -876,14 +861,11 @@ pub(crate) unsafe fn llvm_optimize(
             }
             write_output_file(
                 dcx,
-                module.module_llvm.tm.raw(),
-                config.no_builtins,
                 llmod2,
                 &out_obj,
                 None,
                 llvm::FileType::ObjectFile,
                 prof,
-                true,
             );
             // We ignore cgcx.save_temps here and unconditionally always keep our `device.bin` artifact.
             // Otherwise, recompiling the host code would fail since we deleted that device artifact
@@ -997,7 +979,6 @@ pub(crate) fn codegen(
     {
         let llmod = module.module_llvm.llmod();
         let llcx = &*module.module_llvm.llcx;
-        let tm = &*module.module_llvm.tm;
         let _handlers = DiagnosticHandlers::new(
             cgcx,
             shared_emitter,
@@ -1111,14 +1092,11 @@ pub(crate) fn codegen(
             };
             write_output_file(
                 dcx,
-                tm.raw(),
-                config.no_builtins,
                 llmod,
                 &path,
                 None,
                 llvm::FileType::AssemblyFile,
                 prof,
-                config.verify_llvm_ir,
             );
         }
 
@@ -1144,14 +1122,11 @@ pub(crate) fn codegen(
 
                 write_output_file(
                     dcx,
-                    tm.raw(),
-                    config.no_builtins,
                     llmod,
                     &obj_out,
                     dwo_out,
                     llvm::FileType::ObjectFile,
                     prof,
-                    config.verify_llvm_ir,
                 );
             }
 
