@@ -6,7 +6,7 @@ use std::ptr;
 use std::string::FromUtf8Error;
 
 use libc::c_uint;
-use rustc_abi::{Align, Size, WrappingRange};
+use rustc_abi::{AddressSpace, Align, Size, WrappingRange};
 use rustc_llvm::RustString;
 
 pub(crate) use self::CallConv::*;
@@ -21,8 +21,10 @@ pub(crate) mod diagnostic;
 pub(crate) mod enzyme_ffi;
 mod ffi;
 mod metadata_kind;
+pub(crate) mod offload_ffi;
 
 pub(crate) use self::enzyme_ffi::*;
+pub(crate) use self::offload_ffi::*;
 
 impl LLVMRustResult {
     pub(crate) fn into_result(self) -> Result<(), ()> {
@@ -41,6 +43,14 @@ pub(crate) fn AddFunctionAttributes<'ll>(
     unsafe {
         LLVMRustAddFunctionAttributes(llfn, idx.as_uint(), attrs.as_ptr(), attrs.len());
     }
+}
+
+pub(crate) fn HasStringAttribute<'ll>(llfn: &'ll Value, name: &str) -> bool {
+    unsafe { LLVMRustHasFnAttribute(llfn, name.as_c_char_ptr(), name.len()) }
+}
+
+pub(crate) fn RemoveStringAttrFromFn<'ll>(llfn: &'ll Value, name: &str) {
+    unsafe { LLVMRustRemoveFnAttribute(llfn, name.as_c_char_ptr(), name.len()) }
 }
 
 pub(crate) fn AddCallSiteAttributes<'ll>(
@@ -65,6 +75,21 @@ pub(crate) fn CreateAttrStringValue<'ll>(
             attr.len().try_into().unwrap(),
             value.as_c_char_ptr(),
             value.len().try_into().unwrap(),
+        )
+    }
+}
+pub(crate) fn CreateAttrStringValueFromCStr<'ll>(
+    llcx: &'ll Context,
+    attr: &std::ffi::CStr,
+    value: &std::ffi::CStr,
+) -> &'ll Attribute {
+    unsafe {
+        LLVMCreateStringAttribute(
+            llcx,
+            (*attr).as_ptr(),
+            (*attr).to_bytes().len() as c_uint,
+            (*value).as_ptr(),
+            (*value).to_bytes().len() as c_uint,
         )
     }
 }
@@ -276,6 +301,10 @@ pub(crate) fn set_comdat(llmod: &Module, llglobal: &Value, name: &CStr) {
     }
 }
 
+pub(crate) fn count_params(llfn: &Value) -> c_uint {
+    LLVMCountParams(llfn)
+}
+
 /// Safe wrapper around `LLVMGetParam`, because segfaults are no fun.
 pub(crate) fn get_param(llfn: &Value, index: c_uint) -> &Value {
     unsafe {
@@ -309,6 +338,14 @@ impl Intrinsic {
     pub(crate) fn lookup(name: &[u8]) -> Option<Self> {
         let id = unsafe { LLVMLookupIntrinsicID(name.as_c_char_ptr(), name.len()) };
         NonZero::new(id).map(|id| Self { id })
+    }
+
+    pub(crate) fn is_overloaded(self) -> bool {
+        unsafe { LLVMIntrinsicIsOverloaded(self.id).is_true() }
+    }
+
+    pub(crate) fn is_target_specific(self) -> bool {
+        unsafe { LLVMRustIsTargetIntrinsic(self.id) }
     }
 
     pub(crate) fn get_declaration<'ll>(
@@ -442,5 +479,32 @@ pub(crate) fn set_dso_local<'ll>(v: &'ll Value) {
 pub(crate) fn append_module_inline_asm<'ll>(llmod: &'ll Module, asm: &[u8]) {
     unsafe {
         LLVMAppendModuleInlineAsm(llmod, asm.as_ptr(), asm.len());
+    }
+}
+
+/// Safe wrapper for `LLVMAddAlias2`
+pub(crate) fn add_alias<'ll>(
+    module: &'ll Module,
+    ty: &Type,
+    address_space: AddressSpace,
+    aliasee: &Value,
+    name: &CStr,
+) -> &'ll Value {
+    unsafe { LLVMAddAlias2(module, ty, address_space.0, aliasee, name.as_ptr()) }
+}
+
+/// Safe wrapper for `LLVMRustConstPtrAuth`.
+pub(crate) fn const_ptr_auth<'ll>(
+    ptr: &'ll Value,
+    key: u32,
+    disc: u64,
+    addr_diversity: Option<&'ll Value>,
+) -> &'ll Value {
+    unsafe {
+        let addr_div_ptr = addr_diversity.map_or(std::ptr::null(), |v| v as *const Value);
+        let deactivation_symbol = std::ptr::null();
+        let result =
+            LLVMRustConstPtrAuth(ptr as *const Value, key, disc, addr_div_ptr, deactivation_symbol);
+        &*result
     }
 }

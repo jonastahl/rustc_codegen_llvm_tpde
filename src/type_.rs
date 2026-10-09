@@ -15,7 +15,7 @@ use rustc_target::callconv::{CastTarget, FnAbi};
 use crate::abi::{FnAbiLlvmExt, LlvmType};
 use crate::common;
 use crate::context::{CodegenCx, GenericCx, SCx};
-use crate::llvm::{self, FALSE, Metadata, TRUE, ToLlvmBool, Type, Value};
+use crate::llvm::{self, FALSE, TRUE, ToGeneric, ToLlvmBool, Type, Value};
 use crate::type_of::LayoutLlvmExt;
 
 impl PartialEq for Type {
@@ -64,13 +64,21 @@ impl<'ll, CX: Borrow<SCx<'ll>>> GenericCx<'ll, CX> {
         llvm::LLVMIntTypeInContext(self.llcx(), num_bits as c_uint)
     }
 
-    pub(crate) fn type_vector(&self, ty: &'ll Type, len: u64) -> &'ll Type {
-        unsafe { llvm::LLVMVectorType(ty, len as c_uint) }
+    pub(crate) fn type_vector(&self, ty: &'ll Type, count: u64) -> &'ll Type {
+        unsafe { llvm::LLVMVectorType(ty, count as c_uint) }
+    }
+
+    pub(crate) fn type_scalable_vector(&self, ty: &'ll Type, count: u64) -> &'ll Type {
+        unsafe { llvm::LLVMScalableVectorType(ty, count as c_uint) }
     }
 
     pub(crate) fn add_func(&self, name: &str, ty: &'ll Type) -> &'ll Value {
         let name = SmallCStr::new(name);
         unsafe { llvm::LLVMAddFunction(self.llmod(), name.as_ptr(), ty) }
+    }
+
+    pub(crate) fn get_return_type(&self, ty: &'ll Type) -> &'ll Type {
+        unsafe { llvm::LLVMGetReturnType(ty) }
     }
 
     pub(crate) fn func_params_types(&self, ty: &'ll Type) -> Vec<&'ll Type> {
@@ -82,12 +90,22 @@ impl<'ll, CX: Borrow<SCx<'ll>>> GenericCx<'ll, CX> {
             args
         }
     }
-}
-impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
-    pub(crate) fn type_bool(&self) -> &'ll Type {
-        self.type_i8()
+
+    pub(crate) fn func_is_variadic(&self, ty: &'ll Type) -> bool {
+        unsafe { llvm::LLVMIsFunctionVarArg(ty).is_true() }
     }
 
+    pub(crate) fn struct_element_types(&self, ty: &'ll Type) -> Vec<&'ll Type> {
+        unsafe {
+            let n_args = llvm::LLVMCountStructElementTypes(ty) as usize;
+            let mut args = Vec::with_capacity(n_args);
+            llvm::LLVMGetStructElementTypes(ty, args.as_mut_ptr());
+            args.set_len(n_args);
+            args
+        }
+    }
+}
+impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
     pub(crate) fn type_int_from_ty(&self, t: ty::IntTy) -> &'ll Type {
         match t {
             ty::IntTy::Isize => self.type_isize(),
@@ -160,6 +178,10 @@ impl<'ll, CX: Borrow<SCx<'ll>>> GenericCx<'ll, CX> {
                 packed.to_llvm_bool(),
             )
         }
+    }
+
+    pub(crate) fn type_bf16(&self) -> &'ll Type {
+        unsafe { llvm::LLVMBFloatTypeInContext(self.llcx()) }
     }
 }
 
@@ -274,12 +296,6 @@ impl<'ll, 'tcx> LayoutTypeCodegenMethods<'tcx> for CodegenCx<'ll, 'tcx> {
     fn immediate_backend_type(&self, layout: TyAndLayout<'tcx>) -> &'ll Type {
         layout.immediate_llvm_type(self)
     }
-    fn is_backend_immediate(&self, layout: TyAndLayout<'tcx>) -> bool {
-        layout.is_llvm_immediate()
-    }
-    fn is_backend_scalar_pair(&self, layout: TyAndLayout<'tcx>) -> bool {
-        layout.is_llvm_scalar_pair()
-    }
     fn scalar_pair_element_backend_type(
         &self,
         layout: TyAndLayout<'tcx>,
@@ -313,10 +329,6 @@ impl<'ll, 'tcx> TypeMembershipCodegenMethods<'tcx> for CodegenCx<'ll, 'tcx> {
         let typeid_metadata = self.create_metadata(typeid);
         let v = [llvm::LLVMValueAsMetadata(self.const_usize(0)), typeid_metadata];
         self.global_set_metadata_node(function, llvm::MD_type, &v);
-    }
-
-    fn typeid_metadata(&self, typeid: &[u8]) -> Option<&'ll Metadata> {
-        Some(self.create_metadata(typeid))
     }
 
     fn add_kcfi_type_metadata(&self, function: &'ll Value, kcfi_typeid: u32) {
