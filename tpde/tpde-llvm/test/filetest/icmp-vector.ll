@@ -7,7 +7,7 @@
 ; RUN: tpde-llc --target=aarch64 %s | %objdump | FileCheck %s -check-prefixes=ARM64
 ; XFAIL: llvm19.1
 ; XFAIL: llvm20.1
-; XFAIL: llvm19.1
+; XFAIL: llvm23.1
 
 define void @icmp_eq_v8i8(ptr %p, <8 x i8> %a, <8 x i8> %b) {
 ; X64-LABEL: <icmp_eq_v8i8>:

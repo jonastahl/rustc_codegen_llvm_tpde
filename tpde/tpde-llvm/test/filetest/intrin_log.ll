@@ -54,3 +54,27 @@ define double @f64(double %a) {
   %r = call double @llvm.log(double %a)
   ret double %r
 }
+
+define fp128 @f128(fp128 %a) {
+; X64-LABEL: <f128>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    sub rsp, 0x30
+; X64-NEXT:    call <L0>
+; X64-NEXT:     R_X86_64_PLT32 logf128-0x4
+; X64-NEXT:  <L0>:
+; X64-NEXT:    add rsp, 0x30
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <f128>:
+; ARM64:         stp x29, x30, [sp, #-0xa0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:  <L0>:
+; ARM64-NEXT:    bl <L0>
+; ARM64-NEXT:     R_AARCH64_CALL26 logf128
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xa0
+; ARM64-NEXT:    ret
+  %r = call fp128 @llvm.log(fp128 %a)
+  ret fp128 %r
+}

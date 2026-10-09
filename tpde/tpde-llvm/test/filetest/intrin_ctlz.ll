@@ -6,6 +6,7 @@
 ; RUN: tpde-llc --target=x86_64 %s | %objdump | FileCheck %s -check-prefixes=X64
 ; RUN: tpde-llc --target=aarch64 %s | %objdump | FileCheck %s -check-prefixes=ARM64
 ; XFAIL: llvm19.1
+; XFAIL: llvm23.1
 
 declare i8   @llvm.ctlz.i8  (i8, i1)
 declare i16   @llvm.ctlz.i16  (i16, i1)

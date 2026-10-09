@@ -38,7 +38,7 @@ Unsupported features currently include:
 
 - Targets other than x86-64-v1/AArch64 (ARMv8.1) (Linux) ELF.
 - Code models other than Small-PIC.
-- Scalar types: integer types larger than `i64` except `i128` (`i128` is supported), pointers with non-zero address space, `half`, `bfloat`, `ppc_fp128`, `x86_amx`.
+- Scalar types: integer types larger than `i128`, pointers with non-zero address space, `half`, `bfloat`, `ppc_fp128`, `x86_amx`.
 - Aggregate types with in total more than 65535 elements.
 - `select` aggregate type other than `{i64, i64}` and `[2 x i64]`.
 - Atomic operations might use a stronger consistency than required (e.g., always `seqcst` for `atomicrmw`).

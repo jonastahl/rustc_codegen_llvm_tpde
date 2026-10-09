@@ -193,6 +193,85 @@ entry:
     ret void
 }
 
+define void @xor_i80_3(i80 %0) {
+; X64-LABEL: <xor_i80_3>:
+; X64:         xor rdi, 0x3
+; X64-NEXT:    xor rsi, 0x0
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <xor_i80_3>:
+; ARM64:         mov w2, #0x0 // =0
+; ARM64-NEXT:    eor x2, x2, x1
+; ARM64-NEXT:    eor x0, x0, #0x3
+; ARM64-NEXT:    ret
+entry:
+    %1 = xor i80 %0, 3
+    ret void
+}
+
+define void @xor_i80_30000000000000003(i80 %0) {
+; X64-LABEL: <xor_i80_30000000000000003>:
+; X64:         xor rdi, 0x3
+; X64-NEXT:    xor rsi, 0x3
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <xor_i80_30000000000000003>:
+; ARM64:         eor x1, x1, #0x3
+; ARM64-NEXT:    eor x0, x0, #0x3
+; ARM64-NEXT:    ret
+entry:
+    %1 = xor i80 %0, u0x30000000000000003
+    ret void
+}
+
+define void @xor_i80_90000000000000003(i80 %0) {
+; X64-LABEL: <xor_i80_90000000000000003>:
+; X64:         xor rdi, 0x3
+; X64-NEXT:    xor rsi, 0x9
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <xor_i80_90000000000000003>:
+; ARM64:         mov x2, #0x9 // =9
+; ARM64-NEXT:    eor x2, x2, x1
+; ARM64-NEXT:    eor x0, x0, #0x3
+; ARM64-NEXT:    ret
+entry:
+    %1 = xor i80 %0, u0x90000000000000003
+    ret void
+}
+
+define void @xor_i80_90000000000000009(i80 %0) {
+; X64-LABEL: <xor_i80_90000000000000009>:
+; X64:         xor rdi, 0x9
+; X64-NEXT:    xor rsi, 0x9
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <xor_i80_90000000000000009>:
+; ARM64:         mov x2, #0x9 // =9
+; ARM64-NEXT:    eor x2, x2, x1
+; ARM64-NEXT:    mov x1, #0x9 // =9
+; ARM64-NEXT:    eor x1, x1, x0
+; ARM64-NEXT:    ret
+entry:
+    %1 = xor i80 %0, u0x90000000000000009
+    ret void
+}
+
+define void @xor_i80_i80(i80 %0, i80 %1) {
+; X64-LABEL: <xor_i80_i80>:
+; X64:         xor rdi, rdx
+; X64-NEXT:    xor rsi, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <xor_i80_i80>:
+; ARM64:         eor x3, x3, x1
+; ARM64-NEXT:    eor x2, x2, x0
+; ARM64-NEXT:    ret
+entry:
+    %2 = xor i80 %0, %1
+    ret void
+}
+
 define void @xor_i128_3(i128 %0) {
 ; X64-LABEL: <xor_i128_3>:
 ; X64:         xor rdi, 0x3
@@ -337,6 +416,29 @@ define void @xor_i37_no_salvage_reg(i37 %0, i37 %1) {
 entry:
     %2 = xor i37 %0, %1
     %3 = xor i37 %0, %2
+    ret void
+}
+
+define void @xor_i80_no_salvage_imm(i80 %0) {
+; X64-LABEL: <xor_i80_no_salvage_imm>:
+; X64:         mov rax, rdi
+; X64-NEXT:    xor rax, 0x3
+; X64-NEXT:    mov rcx, rsi
+; X64-NEXT:    xor rcx, 0x0
+; X64-NEXT:    xor rdi, rax
+; X64-NEXT:    xor rsi, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <xor_i80_no_salvage_imm>:
+; ARM64:         mov w2, #0x0 // =0
+; ARM64-NEXT:    eor x2, x2, x1
+; ARM64-NEXT:    eor x3, x0, #0x3
+; ARM64-NEXT:    eor x2, x2, x1
+; ARM64-NEXT:    eor x3, x3, x0
+; ARM64-NEXT:    ret
+entry:
+    %1 = xor i80 %0, 3
+    %2 = xor i80 %0, %1
     ret void
 }
 

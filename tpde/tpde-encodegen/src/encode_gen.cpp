@@ -77,6 +77,7 @@ struct GenerationState {
   std::unordered_set<unsigned> maybe_fixed_regs{};
 
   bool needs_preserve_flags = false;
+  llvm::MCRegister sp_reg = llvm::MCRegister{};
 
   template <typename... T>
   void fmt_line(std::string &buf,
@@ -887,6 +888,9 @@ bool encode_prepass(llvm::MachineFunction *func, GenerationState &state) {
             if (!mo.isReg() || mo.isUndef()) { // undef => skip LR on AArch64
               continue;
             }
+            if (state.target->reg_is_sp(mo.getReg())) {
+              return false;
+            }
             auto reg_id = state.target->reg_id_from_mc_reg(mo.getReg());
             state.return_regs.push_back(reg_id);
           }
@@ -900,16 +904,31 @@ bool encode_prepass(llvm::MachineFunction *func, GenerationState &state) {
         continue;
       }
 
+      for (const auto &mo : inst.explicit_operands()) {
+        if (mo.isReg() && state.target->reg_is_sp(mo.getReg())) {
+          state.sp_reg = mo.getReg();
+          continue;
+        }
+      }
+
       const llvm::MCInstrDesc &MCID =
           state.func->getTarget().getMCInstrInfo()->get(inst.getOpcode());
       for (auto reg : MCID.implicit_defs()) {
         if (state.target->reg_should_be_ignored(reg)) {
           continue;
         }
+        if (state.target->reg_is_sp(reg)) {
+          state.sp_reg = reg;
+          continue;
+        }
         state.maybe_fixed_regs.insert(state.target->reg_id_from_mc_reg(reg));
       }
       for (auto reg : MCID.implicit_uses()) {
         if (state.target->reg_should_be_ignored(reg)) {
+          continue;
+        }
+        if (state.target->reg_is_sp(reg)) {
+          state.sp_reg = reg;
           continue;
         }
         state.maybe_fixed_regs.insert(state.target->reg_id_from_mc_reg(reg));
@@ -1068,6 +1087,16 @@ bool create_encode_function(llvm::MachineFunction *func,
   std::string write_buf_inner{};
   llvm::raw_string_ostream os(write_buf_inner);
 
+  if (state.sp_reg.isValid()) {
+    os << "  derived()->stack.frame_used = true;\n";
+    if (!state.target->reg_should_be_ignored(state.sp_reg)) {
+      const auto reg_id = state.target->reg_id_from_mc_reg(state.sp_reg);
+      const auto reg_name = state.target->reg_name_lower(reg_id);
+      os << "  scratch_" << reg_name << ".force_set_reg(AsmReg{" << reg_id
+         << "});\n";
+    }
+  }
+
   // TODO: set this more fine-grained
   if (state.needs_preserve_flags) {
     os << "  derived()->set_preserve_flags(true);\n";
@@ -1165,6 +1194,11 @@ bool create_encode_function(llvm::MachineFunction *func,
     fixed_reg_param_names += name;
   }
 
+  if (!state.fixed_reg_conds.empty() &&
+      !state.target->supports_fixed_register_constraints()) {
+    return false;
+  }
+
   for (const auto &[reg, fix_conds] : state.fixed_reg_conds) {
     const auto reg_name_lower = state.target->reg_name_lower(reg);
     auto reg_name_upper = std::string{reg_name_lower};
@@ -1253,6 +1287,14 @@ bool create_encode_function(llvm::MachineFunction *func,
 
   if (state.needs_preserve_flags) {
     os << "  derived()->set_preserve_flags(false);\n";
+  }
+
+  if (state.sp_reg.isValid() &&
+      !state.target->reg_should_be_ignored(state.sp_reg)) {
+    const auto reg_id = state.target->reg_id_from_mc_reg(state.sp_reg);
+    const auto reg_name = state.target->reg_name_lower(reg_id);
+    os << "  scratch_" << reg_name
+       << ".force_set_reg(AsmReg::make_invalid());\n";
   }
 
   // TODO

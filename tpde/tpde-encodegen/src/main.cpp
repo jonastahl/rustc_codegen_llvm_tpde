@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <cstdlib>
 #include <format>
 #include <fstream>
 #include <iostream>
@@ -192,6 +193,7 @@ int main(const int argc, char *argv[]) {
       if (func_name.starts_with(regcall_prefix)) {
         f.setName(func_name.substr(regcall_prefix.size()));
       }
+      f.addFnAttr(llvm::Attribute::NoRedZone);
       if (the_triple.isX86()) {
         f.addFnAttr("no_callee_saved_registers");
       }
@@ -260,5 +262,8 @@ int main(const int argc, char *argv[]) {
 
   // delete tm;
 
-  return 0;
+  // Skip static destruction: when linking against a libLLVM that bundles its
+  // own libstdc++ (e.g. rustc's), destroying std::locale at exit crashes.
+  output_file.flush();
+  std::_Exit(0);
 }

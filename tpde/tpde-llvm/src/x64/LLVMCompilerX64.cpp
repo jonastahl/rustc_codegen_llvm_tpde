@@ -84,7 +84,7 @@ struct LLVMCompilerX64 : tpde::x64::CompilerX64<LLVMAdaptor,
   std::optional<CallBuilder>
       create_call_builder(const llvm::CallBase * = nullptr);
 
-  bool compile_br(const llvm::Instruction *, const ValInfo &, u64);
+  bool compile_cond_br(const llvm::Instruction *, const ValInfo &, u64);
   bool compile_inline_asm(const llvm::CallBase *);
   bool compile_icmp(const llvm::Instruction *, const ValInfo &, u64);
   void compile_i32_cmp_zero(AsmReg reg, llvm::CmpInst::Predicate p);
@@ -192,6 +192,11 @@ struct LLVMCompilerX64 : tpde::x64::CompilerX64<LLVMAdaptor,
     ASM(FADDPrr, FE_ST(1), FE_ST(0));
     fp80_pop(res);
   }
+  void fp80_abs(ValuePart &&a, ValuePart &&res) {
+    fp80_push(std::move(a));
+    ASM(FABS);
+    fp80_pop(res);
+  }
   void fp80_cmp(llvm::CmpInst::Predicate pred,
                 ValuePart &&lhs,
                 ValuePart &&rhs,
@@ -248,15 +253,14 @@ std::optional<LLVMCompilerX64::CallBuilder>
   }
 }
 
-bool LLVMCompilerX64::compile_br(const llvm::Instruction *inst,
-                                 const ValInfo &,
-                                 u64) {
+bool LLVMCompilerX64::compile_cond_br(const llvm::Instruction *inst,
+                                      const ValInfo &,
+                                      u64) {
+#if LLVM_VERSION_MAJOR >= 23
+  const auto *br = llvm::cast<llvm::CondBrInst>(inst);
+#else
   const auto *br = llvm::cast<llvm::BranchInst>(inst);
-  if (br->isUnconditional()) {
-    generate_uncond_branch(adaptor->block_lookup_idx(br->getSuccessor(0)));
-    return true;
-  }
-
+#endif
   const auto true_block = adaptor->block_lookup_idx(br->getSuccessor(0));
   const auto false_block = adaptor->block_lookup_idx(br->getSuccessor(1));
 
@@ -273,9 +277,52 @@ bool LLVMCompilerX64::compile_br(const llvm::Instruction *inst,
 
 bool LLVMCompilerX64::compile_inline_asm(const llvm::CallBase *call) {
   auto inline_asm = llvm::cast<llvm::InlineAsm>(call->getCalledOperand());
-  // TODO: handle inline assembly that actually does something
-  if (!inline_asm->getAsmString().empty() || inline_asm->isAlignStack() ||
-      !call->getType()->isVoidTy()) {
+  if (inline_asm->getAsmString() == "movq\011%rbx, %rsi\012\011"
+                                    "cpuid\012\011"
+                                    "xchgq\011%rbx, %rsi\012\011" &&
+      (inline_asm->getConstraintString() ==
+           "={ax},={si},={cx},={dx},{ax},~{dirflag},~{fpsr},~{flags}" ||
+       inline_asm->getConstraintString() ==
+           "={ax},={si},={cx},={dx},{ax},{cx},~{dirflag},~{fpsr},~{flags}")) {
+    // SPEC hack.
+    ValueRef res = this->result_ref(call);
+    ValuePartRef ax = res.part(0);
+    ValuePartRef si = res.part(1);
+    ValuePartRef cx = res.part(2);
+    ValuePartRef dx = res.part(3);
+    ax.alloc_specific(AsmReg::AX);
+    si.alloc_specific(AsmReg::SI);
+    cx.alloc_specific(AsmReg::CX);
+    dx.alloc_specific(AsmReg::DX);
+    {
+      auto [src, src_part] = this->val_ref_single(call->getArgOperand(0));
+      src_part.reload_into_specific_fixed(AsmReg::AX, 4);
+    }
+    if (call->arg_size() >= 2) {
+      auto [src, src_part] = this->val_ref_single(call->getArgOperand(1));
+      src_part.reload_into_specific_fixed(AsmReg::CX, 4);
+    }
+    ASM(MOV64rr, FE_SI, FE_BX);
+    ASM(CPUID);
+    ASM(XCHG64rr, FE_SI, FE_BX);
+    return true;
+  }
+  if (inline_asm->getAsmString() == ".byte 0x0f, 0x01, 0xd0" &&
+      inline_asm->getConstraintString() ==
+          "={ax},={dx},{cx},~{dirflag},~{fpsr},~{flags}") {
+    // SPEC hack.
+    auto [src, src_part] = this->val_ref_single(call->getArgOperand(0));
+    src_part.load_to_specific(AsmReg::CX);
+    ValueRef res = this->result_ref(call);
+    ValuePartRef ax = res.part(0);
+    ValuePartRef dx = res.part(1);
+    ax.alloc_specific(AsmReg::AX);
+    dx.alloc_specific(AsmReg::DX);
+    ASM(XGETBV);
+    return true;
+  }
+
+  if (inline_asm->isAlignStack() || !call->getType()->isVoidTy()) {
     return false;
   }
 
@@ -292,7 +339,16 @@ bool LLVMCompilerX64::compile_inline_asm(const llvm::CallBase *call) {
     }
   }
 
-  return true;
+  if (inline_asm->getAsmString().empty()) {
+    return true;
+  } else if (inline_asm->getAsmString() == "int3") {
+    // SPEC hack.
+    ASM(INT3);
+    return true;
+  }
+
+  // TODO: handle inline assembly that actually does something
+  return false;
 }
 
 bool LLVMCompilerX64::compile_icmp(const llvm::Instruction *inst,
@@ -338,13 +394,24 @@ bool LLVMCompilerX64::compile_icmp(const llvm::Instruction *inst,
   default: TPDE_UNREACHABLE("invalid icmp predicate");
   }
 
+#if LLVM_VERSION_MAJOR >= 23
+  const llvm::CondBrInst *fuse_br = nullptr;
+#else
   const llvm::BranchInst *fuse_br = nullptr;
+#endif
   const llvm::Instruction *fuse_ext = nullptr;
 
   bool single_use = cmp->hasNUses(1);
   const llvm::Instruction *next = cmp->getNextNode();
-  if (auto *br = llvm::dyn_cast<llvm::BranchInst>(next);
-      br && br->isConditional() && br->getCondition() == cmp) {
+  if (
+#if LLVM_VERSION_MAJOR >= 23
+      auto *br = llvm::dyn_cast<llvm::CondBrInst>(next);
+      br && br->getCondition() == cmp
+#else
+      auto *br = llvm::dyn_cast<llvm::BranchInst>(next);
+      br && br->isConditional() && br->getCondition() == cmp
+#endif
+  ) {
     fuse_br = br;
   } else if (single_use && *cmp->user_begin() == next) {
     if (llvm::isa<llvm::ZExtInst, llvm::SExtInst>(next) &&
@@ -356,7 +423,8 @@ bool LLVMCompilerX64::compile_icmp(const llvm::Instruction *inst,
   auto lhs = this->val_ref(cmp->getOperand(0));
   auto rhs = this->val_ref(cmp->getOperand(1));
 
-  if (int_width == 128) {
+  if (int_width > 64) {
+    assert(int_width <= 128);
     // for 128 bit compares, we need to swap the operands sometimes
     if ((jump == Jump::ja) || (jump == Jump::jbe) || (jump == Jump::jle) ||
         (jump == Jump::jg)) {
@@ -366,28 +434,27 @@ bool LLVMCompilerX64::compile_icmp(const llvm::Instruction *inst,
 
     auto rhs_lo = rhs.part(0);
     auto rhs_hi = rhs.part(1);
+    auto lhs_hi = lhs.part(1);
+    if (int_width < 128) {
+      lhs_hi = std::move(lhs_hi).into_extended(is_signed, int_width - 64, 64);
+      rhs_hi = std::move(rhs_hi).into_extended(is_signed, int_width - 64, 64);
+    }
+    lhs_hi = std::move(lhs_hi).into_temporary();
     auto rhs_reg_lo = rhs_lo.load_to_reg();
-    auto rhs_reg_hi = rhs_hi.load_to_reg();
+    auto rhs_reg_hi = rhs_hi.cur_reg_or_load();
 
     // Compare the ints using carried subtraction
-    ScratchReg res_scratch{this};
     if ((jump == Jump::je) || (jump == Jump::jne)) {
       // for eq,neq do something a bit quicker
-      ScratchReg scratch{this};
-      lhs.part(0).reload_into_specific_fixed(this, res_scratch.alloc_gp());
-      lhs.part(1).reload_into_specific_fixed(this, scratch.alloc_gp());
-
-      ASM(XOR64rr, res_scratch.cur_reg(), rhs_reg_lo);
-      ASM(XOR64rr, scratch.cur_reg(), rhs_reg_hi);
-      ASM(OR64rr, res_scratch.cur_reg(), scratch.cur_reg());
+      auto lhs_lo = lhs.part(0).into_temporary();
+      ASM(XOR64rr, lhs_lo.cur_reg(), rhs_reg_lo);
+      ASM(XOR64rr, lhs_hi.cur_reg(), rhs_reg_hi);
+      ASM(OR64rr, lhs_lo.cur_reg(), lhs_hi.cur_reg());
     } else {
       auto lhs_lo = lhs.part(0);
       auto lhs_reg_lo = lhs_lo.load_to_reg();
-      auto lhs_high_tmp =
-          lhs.part(1).reload_into_specific_fixed(this, res_scratch.alloc_gp());
-
       ASM(CMP64rr, lhs_reg_lo, rhs_reg_lo);
-      ASM(SBB64rr, lhs_high_tmp, rhs_reg_hi);
+      ASM(SBB64rr, lhs_hi.cur_reg(), rhs_reg_hi);
     }
   } else {
     ValuePartRef lhs_op = lhs.part(0);
@@ -590,7 +657,7 @@ bool LLVMCompilerX64::handle_intrin(const llvm::IntrinsicInst *inst) {
     ValuePartRef res{this, CompilerConfig::GP_BANK};
     res.alloc_reg();
     auto op = llvm::cast<llvm::ConstantInt>(inst->getOperand(0));
-    if (op->isZeroValue()) {
+    if (op->isZero()) {
       ASM(MOV64rm, res.cur_reg(), FE_MEM(FE_BP, 0, FE_NOREG, 8));
     } else {
       ASM(XOR32rr, res.cur_reg(), res.cur_reg());
@@ -602,7 +669,7 @@ bool LLVMCompilerX64::handle_intrin(const llvm::IntrinsicInst *inst) {
     ValuePartRef res{this, CompilerConfig::GP_BANK};
     res.alloc_reg();
     auto op = llvm::cast<llvm::ConstantInt>(inst->getOperand(0));
-    if (op->isZeroValue()) {
+    if (op->isZero()) {
       ASM(MOV64rr, res.cur_reg(), FE_BP);
     } else {
       ASM(XOR32rr, res.cur_reg(), res.cur_reg());

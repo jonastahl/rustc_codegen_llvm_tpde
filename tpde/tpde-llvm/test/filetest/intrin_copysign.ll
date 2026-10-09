@@ -4,6 +4,8 @@
 
 ; RUN: tpde-llc --target=x86_64 %s | %objdump | FileCheck %s -check-prefixes=X64
 ; RUN: tpde-llc --target=aarch64 %s | %objdump | FileCheck %s -check-prefixes=ARM64
+; XFAIL: llvm19.1
+; XFAIL: llvm20.1
 
 define float @copysignf32(float %0, float %1) {
 ; X64-LABEL: <copysignf32>:
@@ -38,6 +40,30 @@ define double @copysignf64(double %0, double %1) {
 ; ARM64-NEXT:    ret
   %res = call double @llvm.copysign.f64(double %0, double %1)
   ret double %res
+}
+
+define fp128 @copysignf128(fp128 %0, fp128 %1) {
+; X64-LABEL: <copysignf128>:
+; X64:         andps xmm1, xmmword ptr <copysignf128>
+; X64-NEXT:     R_X86_64_PC32 -0x4
+; X64-NEXT:    andps xmm0, xmmword ptr <copysignf128+0x7>
+; X64-NEXT:     R_X86_64_PC32 -0x4
+; X64-NEXT:    orps xmm0, xmm1
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <copysignf128>:
+; ARM64:         stp x29, x30, [sp, #-0xa0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    stp q0, q1, [sp, #-0x20]!
+; ARM64-NEXT:    ldrb w0, [sp, #0xf]
+; ARM64-NEXT:    ldrb w1, [sp, #0x1f]
+; ARM64-NEXT:    bfxil w1, w0, #0, #7
+; ARM64-NEXT:    strb w1, [sp, #0xf]
+; ARM64-NEXT:    ldr q0, [sp], #0x20
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xa0
+; ARM64-NEXT:    ret
+  %res = call fp128 @llvm.copysign.f128(fp128 %0, fp128 %1)
+  ret fp128 %res
 }
 
 define float @copysignf32_noreuse(float %0, float %1) {
@@ -83,4 +109,42 @@ define double @copysignf64_noreuse(double %0, double %1) {
   %cs = call double @llvm.copysign.f64(double %0, double %1)
   %res = fadd double %0, %cs
   ret double %res
+}
+
+define fp128 @copysignf128_noreuse(fp128 %0, fp128 %1) {
+; X64-LABEL: <copysignf128_noreuse>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    sub rsp, 0x30
+; X64-NEXT:    andps xmm1, xmmword ptr <copysignf128_noreuse+0x8>
+; X64-NEXT:     R_X86_64_PC32 -0x4
+; X64-NEXT:    movapd xmm2, xmm0
+; X64-NEXT:    andps xmm2, xmmword ptr <copysignf128_noreuse+0x13>
+; X64-NEXT:     R_X86_64_PC32 -0x4
+; X64-NEXT:    orps xmm2, xmm1
+; X64-NEXT:    movapd xmm1, xmm2
+; X64-NEXT:    call <L0>
+; X64-NEXT:     R_X86_64_PLT32 __addtf3-0x4
+; X64-NEXT:  <L0>:
+; X64-NEXT:    add rsp, 0x30
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <copysignf128_noreuse>:
+; ARM64:         stp x29, x30, [sp, #-0xa0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    stp q0, q1, [sp, #-0x20]!
+; ARM64-NEXT:    ldrb w0, [sp, #0xf]
+; ARM64-NEXT:    ldrb w1, [sp, #0x1f]
+; ARM64-NEXT:    bfxil w1, w0, #0, #7
+; ARM64-NEXT:    strb w1, [sp, #0xf]
+; ARM64-NEXT:    ldr q1, [sp], #0x20
+; ARM64-NEXT:  <L0>:
+; ARM64-NEXT:    bl <L0>
+; ARM64-NEXT:     R_AARCH64_CALL26 __addtf3
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xa0
+; ARM64-NEXT:    ret
+  %cs = call fp128 @llvm.copysign.f128(fp128 %0, fp128 %1)
+  %res = fadd fp128 %0, %cs
+  ret fp128 %res
 }

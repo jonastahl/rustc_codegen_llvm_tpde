@@ -52,10 +52,10 @@ define i32 @call_byval(i32 %0) {
 ; ARM64-NEXT:    mov x29, sp
 ; ARM64-NEXT:    add x1, x29, #0xa0
 ; ARM64-NEXT:    sub sp, sp, #0x10
-; ARM64-NEXT:    ldr x16, [x1]
-; ARM64-NEXT:    str x16, [sp]
-; ARM64-NEXT:    ldr x16, [x1, #0x8]
-; ARM64-NEXT:    str x16, [sp, #0x8]
+; ARM64-NEXT:    ldr x2, [x1]
+; ARM64-NEXT:    str x2, [sp]
+; ARM64-NEXT:    ldr x2, [x1, #0x8]
+; ARM64-NEXT:    str x2, [sp, #0x8]
 ; ARM64-NEXT:  <L0>:
 ; ARM64-NEXT:    bl <L0>
 ; ARM64-NEXT:     R_AARCH64_CALL26 fn_i32_byval_ptr_i32_i32
@@ -134,16 +134,16 @@ define void @call_byval2(ptr %a, ptr %b, ptr %c) {
 ; ARM64:         stp x29, x30, [sp, #-0xa0]!
 ; ARM64-NEXT:    mov x29, sp
 ; ARM64-NEXT:    sub sp, sp, #0x30
-; ARM64-NEXT:    ldr x16, [x0]
-; ARM64-NEXT:    str x16, [sp]
-; ARM64-NEXT:    ldr x16, [x0, #0x8]
-; ARM64-NEXT:    str x16, [sp, #0x8]
-; ARM64-NEXT:    ldr x16, [x1]
-; ARM64-NEXT:    str x16, [sp, #0x10]
-; ARM64-NEXT:    ldr x16, [x2]
-; ARM64-NEXT:    str x16, [sp, #0x20]
-; ARM64-NEXT:    ldr x16, [x2, #0x8]
-; ARM64-NEXT:    str x16, [sp, #0x28]
+; ARM64-NEXT:    ldr x3, [x0]
+; ARM64-NEXT:    str x3, [sp]
+; ARM64-NEXT:    ldr x3, [x0, #0x8]
+; ARM64-NEXT:    str x3, [sp, #0x8]
+; ARM64-NEXT:    ldr x0, [x1]
+; ARM64-NEXT:    str x0, [sp, #0x10]
+; ARM64-NEXT:    ldr x0, [x2]
+; ARM64-NEXT:    str x0, [sp, #0x20]
+; ARM64-NEXT:    ldr x0, [x2, #0x8]
+; ARM64-NEXT:    str x0, [sp, #0x28]
 ; ARM64-NEXT:  <L0>:
 ; ARM64-NEXT:    bl <L0>
 ; ARM64-NEXT:     R_AARCH64_CALL26 fn_byval2
@@ -212,12 +212,12 @@ define void @call_byval3(ptr %a, ptr %b, ptr %c, ptr %d) {
 ; ARM64:         stp x29, x30, [sp, #-0xa0]!
 ; ARM64-NEXT:    mov x29, sp
 ; ARM64-NEXT:    sub sp, sp, #0x20
-; ARM64-NEXT:    ldrb w16, [x0]
-; ARM64-NEXT:    strb w16, [sp]
-; ARM64-NEXT:    ldr w16, [x1]
-; ARM64-NEXT:    str w16, [sp, #0x8]
-; ARM64-NEXT:    ldrb w16, [x2]
-; ARM64-NEXT:    strb w16, [sp, #0x10]
+; ARM64-NEXT:    ldrb w4, [x0]
+; ARM64-NEXT:    strb w4, [sp]
+; ARM64-NEXT:    ldr w0, [x1]
+; ARM64-NEXT:    str w0, [sp, #0x8]
+; ARM64-NEXT:    ldrb w0, [x2]
+; ARM64-NEXT:    strb w0, [sp, #0x10]
 ; ARM64-NEXT:    mov x0, x3
 ; ARM64-NEXT:  <L0>:
 ; ARM64-NEXT:    bl <L0>
@@ -360,12 +360,12 @@ define void @call_byval6(ptr %a) {
 ; ARM64:         stp x29, x30, [sp, #-0xa0]!
 ; ARM64-NEXT:    mov x29, sp
 ; ARM64-NEXT:    sub sp, sp, #0x10
-; ARM64-NEXT:    ldr w16, [x0]
-; ARM64-NEXT:    str w16, [sp]
-; ARM64-NEXT:    ldrh w16, [x0, #0x4]
-; ARM64-NEXT:    strh w16, [sp, #0x4]
-; ARM64-NEXT:    ldrb w16, [x0, #0x6]
-; ARM64-NEXT:    strb w16, [sp, #0x6]
+; ARM64-NEXT:    ldr w1, [x0]
+; ARM64-NEXT:    str w1, [sp]
+; ARM64-NEXT:    ldrh w1, [x0, #0x4]
+; ARM64-NEXT:    strh w1, [sp, #0x4]
+; ARM64-NEXT:    ldrb w1, [x0, #0x6]
+; ARM64-NEXT:    strb w1, [sp, #0x6]
 ; ARM64-NEXT:  <L0>:
 ; ARM64-NEXT:    bl <L0>
 ; ARM64-NEXT:     R_AARCH64_CALL26 fn_byval6
@@ -407,10 +407,10 @@ define void @call_byval7(ptr %a) {
 ; ARM64:         stp x29, x30, [sp, #-0xa0]!
 ; ARM64-NEXT:    mov x29, sp
 ; ARM64-NEXT:    sub sp, sp, #0x10
-; ARM64-NEXT:    ldrh w16, [x0]
-; ARM64-NEXT:    strh w16, [sp]
-; ARM64-NEXT:    ldrb w16, [x0, #0x2]
-; ARM64-NEXT:    strb w16, [sp, #0x2]
+; ARM64-NEXT:    ldrh w1, [x0]
+; ARM64-NEXT:    strh w1, [sp]
+; ARM64-NEXT:    ldrb w1, [x0, #0x2]
+; ARM64-NEXT:    strb w1, [sp, #0x2]
 ; ARM64-NEXT:  <L0>:
 ; ARM64-NEXT:    bl <L0>
 ; ARM64-NEXT:     R_AARCH64_CALL26 fn_byval7

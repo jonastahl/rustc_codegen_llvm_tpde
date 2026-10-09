@@ -21,6 +21,8 @@ struct EncodingTargetArm64 : EncodingTarget {
 
   std::string_view get_invalid_reg() override { return "wtf??"; }
 
+  bool supports_fixed_register_constraints() override { return false; }
+
   void get_inst_candidates(
       llvm::MachineInstr &inst,
       llvm::SmallVectorImpl<MICandidate> &candidates) override;
@@ -69,6 +71,12 @@ struct EncodingTargetArm64 : EncodingTarget {
 
   bool reg_is_flags(const llvm::MCRegister) override {
     return false; // Flag preservation is not needed on AArch64.
+  }
+
+  bool reg_is_sp(const llvm::MCRegister reg) override {
+    const auto name =
+        std::string_view{func->getSubtarget().getRegisterInfo()->getName(reg)};
+    return name == "SP" || name == "WSP";
   }
 
   void generate_copy(std::string &buf,
@@ -121,7 +129,11 @@ struct EncodingTargetArm64 : EncodingTarget {
   std::string direct_test_jump_code(llvm::MachineInstr *inst) override {
     const llvm::TargetMachine &TM = inst->getMF()->getTarget();
     const llvm::MCInstrInfo *MCII = TM.getMCInstrInfo();
+#if LLVM_VERSION_MAJOR >= 23
+    const llvm::MCRegisterInfo *TRI = &TM.getMCRegisterInfo();
+#else
     const llvm::MCRegisterInfo *TRI = TM.getMCRegisterInfo();
+#endif
     llvm::StringRef Name = MCII->getName(inst->getOpcode());
 
     if (Name == "TBNZX" || Name == "TBNZW") {

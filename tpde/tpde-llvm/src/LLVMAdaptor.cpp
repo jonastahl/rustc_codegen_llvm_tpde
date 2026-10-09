@@ -627,13 +627,13 @@ LLVMBasicValType LLVMAdaptor::lower_simple_type(const llvm::Type *type) {
     tys[llvm::Type::PointerTyID] = LLVMBasicValType::ptr;
 
     // Integer types
-    for (unsigned i = 1; i <= 64; ++i) {
+    for (unsigned i = 1; i <= 128; ++i) {
       tys[LutBeginInt + i] = i <= 8    ? LLVMBasicValType::i8
                              : i <= 16 ? LLVMBasicValType::i16
                              : i <= 32 ? LLVMBasicValType::i32
-                                       : LLVMBasicValType::i64;
+                             : i <= 64 ? LLVMBasicValType::i64
+                                       : LLVMBasicValType::i128;
     }
-    tys[LutBeginInt + 128] = LLVMBasicValType::i128;
     return tys;
   }();
 

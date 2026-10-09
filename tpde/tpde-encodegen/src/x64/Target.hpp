@@ -21,6 +21,8 @@ struct EncodingTargetX64 : EncodingTarget {
 
   std::string_view get_invalid_reg() override { return "FE_NOREG"; }
 
+  bool supports_fixed_register_constraints() override { return true; }
+
   void get_inst_candidates(
       llvm::MachineInstr &inst,
       llvm::SmallVectorImpl<MICandidate> &candidates) override;
@@ -101,7 +103,7 @@ struct EncodingTargetX64 : EncodingTarget {
     const auto name =
         std::string_view{func->getSubtarget().getRegisterInfo()->getName(reg)};
     return (name == "EFLAGS" || name == "MXCSR" || name == "FPCW" ||
-            name == "SSP" || name == "RIP");
+            name == "FPSW" || name == "SSP" || name == "RIP");
   }
 
   bool reg_is_flags(const llvm::MCRegister reg) override {
@@ -111,6 +113,10 @@ struct EncodingTargetX64 : EncodingTarget {
     const auto name =
         std::string_view{func->getSubtarget().getRegisterInfo()->getName(reg)};
     return name == "EFLAGS";
+  }
+
+  bool reg_is_sp(const llvm::MCRegister reg) override {
+    return reg.isValid() && reg_is_gp(reg) && reg_id_from_mc_reg(reg) == 4;
   }
 
   void generate_copy(std::string &buf,

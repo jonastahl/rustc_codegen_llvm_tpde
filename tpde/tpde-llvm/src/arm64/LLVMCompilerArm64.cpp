@@ -79,7 +79,7 @@ struct LLVMCompilerArm64 : tpde::a64::CompilerA64<LLVMAdaptor,
                       LLVMBasicValType ty,
                       GenericValuePart el);
 
-  bool compile_br(const llvm::Instruction *, const ValInfo &, u64);
+  bool compile_cond_br(const llvm::Instruction *, const ValInfo &, u64);
   bool compile_inline_asm(const llvm::CallBase *);
   bool compile_icmp(const llvm::Instruction *, const ValInfo &, u64);
   void compile_i32_cmp_zero(AsmReg reg, llvm::CmpInst::Predicate p);
@@ -233,15 +233,14 @@ void LLVMCompilerArm64::insert_element(ValueRef &vec_vr,
   vec_ref.set_modified();
 }
 
-bool LLVMCompilerArm64::compile_br(const llvm::Instruction *inst,
-                                   const ValInfo &,
-                                   u64) {
+bool LLVMCompilerArm64::compile_cond_br(const llvm::Instruction *inst,
+                                        const ValInfo &,
+                                        u64) {
+#if LLVM_VERSION_MAJOR >= 23
+  const auto *br = llvm::cast<llvm::CondBrInst>(inst);
+#else
   const auto *br = llvm::cast<llvm::BranchInst>(inst);
-  if (br->isUnconditional()) {
-    generate_uncond_branch(adaptor->block_lookup_idx(br->getSuccessor(0)));
-    return true;
-  }
-
+#endif
   const auto true_block = adaptor->block_lookup_idx(br->getSuccessor(0));
   const auto false_block = adaptor->block_lookup_idx(br->getSuccessor(1));
 
@@ -323,13 +322,24 @@ bool LLVMCompilerArm64::compile_icmp(const llvm::Instruction *inst,
   default: TPDE_UNREACHABLE("invalid icmp predicate");
   }
 
+#if LLVM_VERSION_MAJOR >= 23
+  const llvm::CondBrInst *fuse_br = nullptr;
+#else
   const llvm::BranchInst *fuse_br = nullptr;
+#endif
   const llvm::Instruction *fuse_ext = nullptr;
 
   bool single_use = cmp->hasNUses(1);
   const llvm::Instruction *next = cmp->getNextNode();
-  if (auto *br = llvm::dyn_cast<llvm::BranchInst>(next);
-      br && br->isConditional() && br->getCondition() == cmp) {
+  if (
+#if LLVM_VERSION_MAJOR >= 23
+      auto *br = llvm::dyn_cast<llvm::CondBrInst>(next);
+      br && br->getCondition() == cmp
+#else
+      auto *br = llvm::dyn_cast<llvm::BranchInst>(next);
+      br && br->isConditional() && br->getCondition() == cmp
+#endif
+  ) {
     fuse_br = br;
   } else if (single_use && *cmp->user_begin() == next) {
     if (llvm::isa<llvm::ZExtInst, llvm::SExtInst>(next) &&
@@ -341,15 +351,20 @@ bool LLVMCompilerArm64::compile_icmp(const llvm::Instruction *inst,
   auto lhs = this->val_ref(cmp->getOperand(0));
   auto rhs = this->val_ref(cmp->getOperand(1));
 
-  if (int_width == 128) {
+  if (int_width > 64) {
+    assert(int_width <= 128);
     auto lhs_lo = lhs.part(0);
     auto lhs_hi = lhs.part(1);
     auto rhs_lo = rhs.part(0);
     auto rhs_hi = rhs.part(1);
+    if (int_width < 128) {
+      lhs_hi = std::move(lhs_hi).into_extended(is_signed, int_width - 64, 64);
+      rhs_hi = std::move(rhs_hi).into_extended(is_signed, int_width - 64, 64);
+    }
     auto lhs_reg_lo = lhs_lo.load_to_reg();
-    auto lhs_reg_hi = lhs_hi.load_to_reg();
+    auto lhs_reg_hi = lhs_hi.cur_reg_or_load();
     auto rhs_reg_lo = rhs_lo.load_to_reg();
-    auto rhs_reg_hi = rhs_hi.load_to_reg();
+    auto rhs_reg_hi = rhs_hi.cur_reg_or_load();
     if ((jump == Jump::Jeq) || (jump == Jump::Jne)) {
       // Use CCMP for equality
       ASM(CMPx, lhs_reg_lo, rhs_reg_lo);
@@ -569,7 +584,7 @@ bool LLVMCompilerArm64::handle_intrin(const llvm::IntrinsicInst *inst) {
   case llvm::Intrinsic::frameaddress: {
     auto [_, res_vr] = this->result_ref_single(inst);
     auto op = llvm::cast<llvm::ConstantInt>(inst->getOperand(0));
-    ASM(MOVx, res_vr.alloc_reg(), op->isZeroValue() ? DA_GP(29) : DA_ZR);
+    ASM(MOVx, res_vr.alloc_reg(), op->isZero() ? DA_GP(29) : DA_ZR);
     return true;
   }
   case llvm::Intrinsic::aarch64_crc32cx: {

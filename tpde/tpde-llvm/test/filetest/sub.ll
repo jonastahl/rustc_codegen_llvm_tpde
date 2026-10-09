@@ -360,6 +360,89 @@ define void @sub_i64_1001_reorder(i64 %0) {
     ret void
 }
 
+define void @sub_i80_1(i80 %0) {
+; X64-LABEL: <sub_i80_1>:
+; X64:         sub rdi, 0x1
+; X64-NEXT:    sbb rsi, 0x0
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <sub_i80_1>:
+; ARM64:         subs x0, x0, #0x1
+; ARM64-NEXT:    mov w2, #0x0 // =0
+; ARM64-NEXT:    sbc x1, x1, x2
+; ARM64-NEXT:    ret
+  entry:
+    %1 = sub nsw i80 %0, 1
+    ret void
+}
+
+define void @sub_i80_invert(i80 %0) {
+; X64-LABEL: <sub_i80_invert>:
+; X64:         sub rdi, -0x1
+; X64-NEXT:    sbb rsi, 0xffff
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <sub_i80_invert>:
+; ARM64:         adds x0, x0, #0x1
+; ARM64-NEXT:    mov x2, #0xffff // =65535
+; ARM64-NEXT:    sbc x1, x1, x2
+; ARM64-NEXT:    ret
+  entry:
+    %1 = sub nsw i80 %0, -1
+    ret void
+}
+
+define void @sub_i80_1_reorder(i80 %0) {
+; X64-LABEL: <sub_i80_1_reorder>:
+; X64:         mov eax, 0x1
+; X64-NEXT:    sub rax, rdi
+; X64-NEXT:    mov ecx, 0x0
+; X64-NEXT:    sbb rcx, rsi
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <sub_i80_1_reorder>:
+; ARM64:         mov x2, #0x1 // =1
+; ARM64-NEXT:    subs x2, x2, x0
+; ARM64-NEXT:    mov w0, #0x0 // =0
+; ARM64-NEXT:    sbc x0, x0, x1
+; ARM64-NEXT:    ret
+  entry:
+    %1 = sub nsw i80 1, %0
+    ret void
+}
+
+define void @sub_i80_1001_1001(i80 %0) {
+; X64-LABEL: <sub_i80_1001_1001>:
+; X64:         sub rdi, 0x1001
+; X64-NEXT:    sbb rsi, 0x1001
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <sub_i80_1001_1001>:
+; ARM64:         mov x2, #0x1001 // =4097
+; ARM64-NEXT:    subs x0, x0, x2
+; ARM64-NEXT:    mov x2, #0x1001 // =4097
+; ARM64-NEXT:    sbc x1, x1, x2
+; ARM64-NEXT:    ret
+  entry:
+    %1 = sub nsw i80 %0, u0x10010000000000001001
+    ret void
+}
+
+define void @sub_i80_i80(i80 %0, i80 %1) {
+; X64-LABEL: <sub_i80_i80>:
+; X64:         sub rdi, rdx
+; X64-NEXT:    sbb rsi, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <sub_i80_i80>:
+; ARM64:         subs x0, x0, x2
+; ARM64-NEXT:    sbc x1, x1, x3
+; ARM64-NEXT:    ret
+  entry:
+    %2 = sub nsw i80 %0, %1
+    ret void
+}
+
 define void @sub_i128_1(i128 %0) {
 ; X64-LABEL: <sub_i128_1>:
 ; X64:         sub rdi, 0x1
@@ -469,6 +552,37 @@ define void @sub_i64_salvage_reg(i64 %0, i64 %1) {
   ret void
 }
 
+define void @sub_i80_salvage_imm(i80 %0) {
+; X64-LABEL: <sub_i80_salvage_imm>:
+; X64:         sub rdi, 0x1
+; X64-NEXT:    sbb rsi, 0x0
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <sub_i80_salvage_imm>:
+; ARM64:         subs x0, x0, #0x1
+; ARM64-NEXT:    mov w2, #0x0 // =0
+; ARM64-NEXT:    sbc x1, x1, x2
+; ARM64-NEXT:    ret
+  entry:
+  %1 = sub nsw i80 %0, 1
+  ret void
+}
+
+define void @sub_i80_salvage_reg(i80 %0, i80 %1) {
+; X64-LABEL: <sub_i80_salvage_reg>:
+; X64:         sub rdi, rdx
+; X64-NEXT:    sbb rsi, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <sub_i80_salvage_reg>:
+; ARM64:         subs x0, x0, x2
+; ARM64-NEXT:    sbc x1, x1, x3
+; ARM64-NEXT:    ret
+  entry:
+  %2 = sub nsw i80 %0, %1
+  ret void
+}
+
 define void @sub_i128_salvage_imm(i128 %0) {
 ; X64-LABEL: <sub_i128_salvage_imm>:
 ; X64:         sub rdi, 0x1
@@ -566,6 +680,51 @@ entry:
     %2 = sub i37 %0, %1
     %3 = sub i37 %0, %2
     ret void
+}
+
+define void @sub_i80_no_salvage_imm(i80 %0) {
+; X64-LABEL: <sub_i80_no_salvage_imm>:
+; X64:         mov rax, rdi
+; X64-NEXT:    sub rax, 0x1
+; X64-NEXT:    mov rcx, rsi
+; X64-NEXT:    sbb rcx, 0x0
+; X64-NEXT:    sub rdi, rax
+; X64-NEXT:    sbb rsi, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <sub_i80_no_salvage_imm>:
+; ARM64:         subs x2, x0, #0x1
+; ARM64-NEXT:    mov w3, #0x0 // =0
+; ARM64-NEXT:    sbc x3, x1, x3
+; ARM64-NEXT:    subs x0, x0, x2
+; ARM64-NEXT:    sbc x1, x1, x3
+; ARM64-NEXT:    ret
+  entry:
+  %1 = sub nsw i80 %0, 1
+  %2 = sub nsw i80 %0, %1
+  ret void
+}
+
+define void @sub_i80_no_salvage_reg(i80 %0, i80 %1) {
+; X64-LABEL: <sub_i80_no_salvage_reg>:
+; X64:         mov rax, rdi
+; X64-NEXT:    sub rax, rdx
+; X64-NEXT:    mov rdx, rsi
+; X64-NEXT:    sbb rdx, rcx
+; X64-NEXT:    sub rdi, rax
+; X64-NEXT:    sbb rsi, rdx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <sub_i80_no_salvage_reg>:
+; ARM64:         subs x2, x0, x2
+; ARM64-NEXT:    sbc x3, x1, x3
+; ARM64-NEXT:    subs x0, x0, x2
+; ARM64-NEXT:    sbc x1, x1, x3
+; ARM64-NEXT:    ret
+  entry:
+  %2 = sub nsw i80 %0, %1
+  %3 = sub nsw i80 %0, %2
+  ret void
 }
 
 define void @sub_i128_no_salvage_imm(i128 %0) {

@@ -254,6 +254,7 @@ if (TPDE_ENABLE_LLVM_PLUGIN)
     )
 
     list(APPEND TPDE_LLVM_TEST_DEPENDS tpde-plugin)
+    install(TARGETS tpde-plugin LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif ()
 
 

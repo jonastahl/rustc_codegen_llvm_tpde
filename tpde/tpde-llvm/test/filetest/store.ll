@@ -195,6 +195,818 @@ entry:
 }
 
 
+define void @store_i72(ptr %a, i72 %b) {
+; X64-LABEL: <store_i72>:
+; X64:         mov qword ptr [rdi], rsi
+; X64-NEXT:    mov byte ptr [rdi + 0x8], dl
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i72>:
+; ARM64:         str x1, [x0]
+; ARM64-NEXT:    strb w2, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i72 %b, ptr %a
+  ret void
+}
+
+define void @store_i72_alloca(i72 %b) {
+; X64-LABEL: <store_i72_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov qword ptr [rax], rdi
+; X64-NEXT:    mov byte ptr [rax + 0x8], sil
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i72_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x2, x29, #0xa0
+; ARM64-NEXT:    str x0, [x2]
+; ARM64-NEXT:    strb w1, [x2, #0x8]
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+  %a = alloca i72
+  store i72 %b, ptr %a
+  ret void
+}
+
+define void @store_i72_const1(ptr %a) {
+; X64-LABEL: <store_i72_const1>:
+; X64:         movabs rax, 0x1337133713371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    mov byte ptr [rdi + 0x8], 0x37
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i72_const1>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x1337, lsl #16
+; ARM64-NEXT:    movk x1, #0x1337, lsl #32
+; ARM64-NEXT:    movk x1, #0x1337, lsl #48
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x37 // =55
+; ARM64-NEXT:    strb w1, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i72 u0x371337133713371337, ptr %a
+  ret void
+}
+
+define void @store_i72_const2(ptr %a) {
+; X64-LABEL: <store_i72_const2>:
+; X64:         mov eax, 0xf3371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    mov byte ptr [rdi + 0x8], 0x37
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i72_const2>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0xf337, lsl #16
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x37 // =55
+; ARM64-NEXT:    strb w1, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i72 u0x3700000000F3371337, ptr %a
+  ret void
+}
+
+define void @store_i72_const3(ptr %a) {
+; X64-LABEL: <store_i72_const3>:
+; X64:         mov qword ptr [rdi], -0x2
+; X64-NEXT:    mov byte ptr [rdi + 0x8], -0x1
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i72_const3>:
+; ARM64:         mov x1, #-0x2 // =-2
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0xff // =255
+; ARM64-NEXT:    strb w1, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i72 -2, ptr %a
+  ret void
+}
+
+
+define void @store_i80(ptr %a, i80 %b) {
+; X64-LABEL: <store_i80>:
+; X64:         mov qword ptr [rdi], rsi
+; X64-NEXT:    mov word ptr [rdi + 0x8], dx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i80>:
+; ARM64:         str x1, [x0]
+; ARM64-NEXT:    strh w2, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i80 %b, ptr %a
+  ret void
+}
+
+define void @store_i80_alloca(i80 %b) {
+; X64-LABEL: <store_i80_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov qword ptr [rax], rdi
+; X64-NEXT:    mov word ptr [rax + 0x8], si
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i80_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x2, x29, #0xa0
+; ARM64-NEXT:    str x0, [x2]
+; ARM64-NEXT:    strh w1, [x2, #0x8]
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+  %a = alloca i80
+  store i80 %b, ptr %a
+  ret void
+}
+
+define void @store_i80_const1(ptr %a) {
+; X64-LABEL: <store_i80_const1>:
+; X64:         movabs rax, 0x1337133713371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    mov word ptr [rdi + 0x8], 0x1337
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i80_const1>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x1337, lsl #16
+; ARM64-NEXT:    movk x1, #0x1337, lsl #32
+; ARM64-NEXT:    movk x1, #0x1337, lsl #48
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    strh w1, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i80 u0x13371337133713371337, ptr %a
+  ret void
+}
+
+define void @store_i80_const2(ptr %a) {
+; X64-LABEL: <store_i80_const2>:
+; X64:         mov eax, 0xf3371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    mov word ptr [rdi + 0x8], 0x1337
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i80_const2>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0xf337, lsl #16
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    strh w1, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i80 u0x133700000000F3371337, ptr %a
+  ret void
+}
+
+define void @store_i80_const3(ptr %a) {
+; X64-LABEL: <store_i80_const3>:
+; X64:         mov qword ptr [rdi], -0x2
+; X64-NEXT:    mov word ptr [rdi + 0x8], 0xffff
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i80_const3>:
+; ARM64:         mov x1, #-0x2 // =-2
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0xffff // =65535
+; ARM64-NEXT:    strh w1, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i80 -2, ptr %a
+  ret void
+}
+
+
+define void @store_i88(ptr %a, i88 %b) {
+; X64-LABEL: <store_i88>:
+; X64:         mov qword ptr [rdi], rsi
+; X64-NEXT:    mov word ptr [rdi + 0x8], dx
+; X64-NEXT:    shr edx, 0x10
+; X64-NEXT:    mov byte ptr [rdi + 0xa], dl
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i88>:
+; ARM64:         str x1, [x0]
+; ARM64-NEXT:    lsr w1, w2, #16
+; ARM64-NEXT:    strh w2, [x0, #0x8]
+; ARM64-NEXT:    strb w1, [x0, #0xa]
+; ARM64-NEXT:    ret
+entry:
+  store i88 %b, ptr %a
+  ret void
+}
+
+define void @store_i88_alloca(i88 %b) {
+; X64-LABEL: <store_i88_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov qword ptr [rax], rdi
+; X64-NEXT:    mov word ptr [rax + 0x8], si
+; X64-NEXT:    shr esi, 0x10
+; X64-NEXT:    mov byte ptr [rax + 0xa], sil
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i88_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x2, x29, #0xa0
+; ARM64-NEXT:    str x0, [x2]
+; ARM64-NEXT:    lsr w0, w1, #16
+; ARM64-NEXT:    strh w1, [x2, #0x8]
+; ARM64-NEXT:    strb w0, [x2, #0xa]
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+  %a = alloca i88
+  store i88 %b, ptr %a
+  ret void
+}
+
+define void @store_i88_const1(ptr %a) {
+; X64-LABEL: <store_i88_const1>:
+; X64:         movabs rax, 0x1337133713371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    mov word ptr [rdi + 0x8], 0x1337
+; X64-NEXT:    mov eax, 0x371337
+; X64-NEXT:    shr eax, 0x10
+; X64-NEXT:    mov byte ptr [rdi + 0xa], al
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i88_const1>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x1337, lsl #16
+; ARM64-NEXT:    movk x1, #0x1337, lsl #32
+; ARM64-NEXT:    movk x1, #0x1337, lsl #48
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x37, lsl #16
+; ARM64-NEXT:    lsr w2, w1, #16
+; ARM64-NEXT:    strh w1, [x0, #0x8]
+; ARM64-NEXT:    strb w2, [x0, #0xa]
+; ARM64-NEXT:    ret
+entry:
+  store i88 u0x3713371337133713371337, ptr %a
+  ret void
+}
+
+define void @store_i88_const2(ptr %a) {
+; X64-LABEL: <store_i88_const2>:
+; X64:         mov eax, 0xf3371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    mov word ptr [rdi + 0x8], 0x1337
+; X64-NEXT:    mov eax, 0x371337
+; X64-NEXT:    shr eax, 0x10
+; X64-NEXT:    mov byte ptr [rdi + 0xa], al
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i88_const2>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0xf337, lsl #16
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x37, lsl #16
+; ARM64-NEXT:    lsr w2, w1, #16
+; ARM64-NEXT:    strh w1, [x0, #0x8]
+; ARM64-NEXT:    strb w2, [x0, #0xa]
+; ARM64-NEXT:    ret
+entry:
+  store i88 u0x37133700000000F3371337, ptr %a
+  ret void
+}
+
+define void @store_i88_const3(ptr %a) {
+; X64-LABEL: <store_i88_const3>:
+; X64:         mov qword ptr [rdi], -0x2
+; X64-NEXT:    mov word ptr [rdi + 0x8], 0xffff
+; X64-NEXT:    mov eax, 0xffffff
+; X64-NEXT:    shr eax, 0x10
+; X64-NEXT:    mov byte ptr [rdi + 0xa], al
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i88_const3>:
+; ARM64:         mov x1, #-0x2 // =-2
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0xffffff // =16777215
+; ARM64-NEXT:    lsr w2, w1, #16
+; ARM64-NEXT:    strh w1, [x0, #0x8]
+; ARM64-NEXT:    strb w2, [x0, #0xa]
+; ARM64-NEXT:    ret
+entry:
+  store i88 -2, ptr %a
+  ret void
+}
+
+
+define void @store_i96(ptr %a, i96 %b) {
+; X64-LABEL: <store_i96>:
+; X64:         mov qword ptr [rdi], rsi
+; X64-NEXT:    mov dword ptr [rdi + 0x8], edx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i96>:
+; ARM64:         str x1, [x0]
+; ARM64-NEXT:    str w2, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i96 %b, ptr %a
+  ret void
+}
+
+define void @store_i96_alloca(i96 %b) {
+; X64-LABEL: <store_i96_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov qword ptr [rax], rdi
+; X64-NEXT:    mov dword ptr [rax + 0x8], esi
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i96_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x2, x29, #0xa0
+; ARM64-NEXT:    str x0, [x2]
+; ARM64-NEXT:    str w1, [x2, #0x8]
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+  %a = alloca i96
+  store i96 %b, ptr %a
+  ret void
+}
+
+define void @store_i96_const1(ptr %a) {
+; X64-LABEL: <store_i96_const1>:
+; X64:         movabs rax, 0x1337133713371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    mov dword ptr [rdi + 0x8], 0x13371337
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i96_const1>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x1337, lsl #16
+; ARM64-NEXT:    movk x1, #0x1337, lsl #32
+; ARM64-NEXT:    movk x1, #0x1337, lsl #48
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x1337, lsl #16
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i96 u0x133713371337133713371337, ptr %a
+  ret void
+}
+
+define void @store_i96_const2(ptr %a) {
+; X64-LABEL: <store_i96_const2>:
+; X64:         mov eax, 0xf3371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    mov eax, 0xf3371337
+; X64-NEXT:    mov dword ptr [rdi + 0x8], eax
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i96_const2>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0xf337, lsl #16
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0xf337, lsl #16
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i96 u0xF337133700000000F3371337, ptr %a
+  ret void
+}
+
+define void @store_i96_const3(ptr %a) {
+; X64-LABEL: <store_i96_const3>:
+; X64:         mov qword ptr [rdi], -0x2
+; X64-NEXT:    mov eax, 0xffffffff
+; X64-NEXT:    mov dword ptr [rdi + 0x8], eax
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i96_const3>:
+; ARM64:         mov x1, #-0x2 // =-2
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0xffffffff // =4294967295
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    ret
+entry:
+  store i96 -2, ptr %a
+  ret void
+}
+
+
+define void @store_i104(ptr %a, i104 %b) {
+; X64-LABEL: <store_i104>:
+; X64:         mov qword ptr [rdi], rsi
+; X64-NEXT:    mov dword ptr [rdi + 0x8], edx
+; X64-NEXT:    shr rdx, 0x20
+; X64-NEXT:    mov byte ptr [rdi + 0xc], dl
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i104>:
+; ARM64:         str x1, [x0]
+; ARM64-NEXT:    lsr x1, x2, #32
+; ARM64-NEXT:    str w2, [x0, #0x8]
+; ARM64-NEXT:    strb w1, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i104 %b, ptr %a
+  ret void
+}
+
+define void @store_i104_alloca(i104 %b) {
+; X64-LABEL: <store_i104_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov qword ptr [rax], rdi
+; X64-NEXT:    mov dword ptr [rax + 0x8], esi
+; X64-NEXT:    shr rsi, 0x20
+; X64-NEXT:    mov byte ptr [rax + 0xc], sil
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i104_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x2, x29, #0xa0
+; ARM64-NEXT:    str x0, [x2]
+; ARM64-NEXT:    lsr x0, x1, #32
+; ARM64-NEXT:    str w1, [x2, #0x8]
+; ARM64-NEXT:    strb w0, [x2, #0xc]
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+  %a = alloca i104
+  store i104 %b, ptr %a
+  ret void
+}
+
+define void @store_i104_const1(ptr %a) {
+; X64-LABEL: <store_i104_const1>:
+; X64:         movabs rax, 0x1337133713371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    movabs rax, 0x3713371337
+; X64-NEXT:    mov dword ptr [rdi + 0x8], eax
+; X64-NEXT:    shr rax, 0x20
+; X64-NEXT:    mov byte ptr [rdi + 0xc], al
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i104_const1>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x1337, lsl #16
+; ARM64-NEXT:    movk x1, #0x1337, lsl #32
+; ARM64-NEXT:    movk x1, #0x1337, lsl #48
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x1337, lsl #16
+; ARM64-NEXT:    movk x1, #0x37, lsl #32
+; ARM64-NEXT:    lsr x2, x1, #32
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    strb w2, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i104 u0x37133713371337133713371337, ptr %a
+  ret void
+}
+
+define void @store_i104_const2(ptr %a) {
+; X64-LABEL: <store_i104_const2>:
+; X64:         mov eax, 0xf3371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    mov eax, 0xf3371337
+; X64-NEXT:    mov dword ptr [rdi + 0x8], eax
+; X64-NEXT:    shr rax, 0x20
+; X64-NEXT:    mov byte ptr [rdi + 0xc], al
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i104_const2>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0xf337, lsl #16
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0xf337, lsl #16
+; ARM64-NEXT:    lsr x2, x1, #32
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    strb w2, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i104 u0xF337133700000000F3371337, ptr %a
+  ret void
+}
+
+define void @store_i104_const3(ptr %a) {
+; X64-LABEL: <store_i104_const3>:
+; X64:         mov qword ptr [rdi], -0x2
+; X64-NEXT:    movabs rax, 0xffffffffff
+; X64-NEXT:    mov dword ptr [rdi + 0x8], eax
+; X64-NEXT:    shr rax, 0x20
+; X64-NEXT:    mov byte ptr [rdi + 0xc], al
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i104_const3>:
+; ARM64:         mov x1, #-0x2 // =-2
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0xffffffffff // =1099511627775
+; ARM64-NEXT:    lsr x2, x1, #32
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    strb w2, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i104 -2, ptr %a
+  ret void
+}
+
+
+define void @store_i112(ptr %a, i112 %b) {
+; X64-LABEL: <store_i112>:
+; X64:         mov qword ptr [rdi], rsi
+; X64-NEXT:    mov dword ptr [rdi + 0x8], edx
+; X64-NEXT:    shr rdx, 0x20
+; X64-NEXT:    mov word ptr [rdi + 0xc], dx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i112>:
+; ARM64:         str x1, [x0]
+; ARM64-NEXT:    lsr x1, x2, #32
+; ARM64-NEXT:    str w2, [x0, #0x8]
+; ARM64-NEXT:    strh w1, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i112 %b, ptr %a
+  ret void
+}
+
+define void @store_i112_alloca(i112 %b) {
+; X64-LABEL: <store_i112_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov qword ptr [rax], rdi
+; X64-NEXT:    mov dword ptr [rax + 0x8], esi
+; X64-NEXT:    shr rsi, 0x20
+; X64-NEXT:    mov word ptr [rax + 0xc], si
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i112_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x2, x29, #0xa0
+; ARM64-NEXT:    str x0, [x2]
+; ARM64-NEXT:    lsr x0, x1, #32
+; ARM64-NEXT:    str w1, [x2, #0x8]
+; ARM64-NEXT:    strh w0, [x2, #0xc]
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+  %a = alloca i112
+  store i112 %b, ptr %a
+  ret void
+}
+
+define void @store_i112_const1(ptr %a) {
+; X64-LABEL: <store_i112_const1>:
+; X64:         movabs rax, 0x1337133713371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    movabs rax, 0x133713371337
+; X64-NEXT:    mov dword ptr [rdi + 0x8], eax
+; X64-NEXT:    shr rax, 0x20
+; X64-NEXT:    mov word ptr [rdi + 0xc], ax
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i112_const1>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x1337, lsl #16
+; ARM64-NEXT:    movk x1, #0x1337, lsl #32
+; ARM64-NEXT:    movk x1, #0x1337, lsl #48
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x1337, lsl #16
+; ARM64-NEXT:    movk x1, #0x1337, lsl #32
+; ARM64-NEXT:    lsr x2, x1, #32
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    strh w2, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i112 u0x1337133713371337133713371337, ptr %a
+  ret void
+}
+
+define void @store_i112_const2(ptr %a) {
+; X64-LABEL: <store_i112_const2>:
+; X64:         mov eax, 0xf3371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    mov eax, 0xf3371337
+; X64-NEXT:    mov dword ptr [rdi + 0x8], eax
+; X64-NEXT:    shr rax, 0x20
+; X64-NEXT:    mov word ptr [rdi + 0xc], ax
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i112_const2>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0xf337, lsl #16
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0xf337, lsl #16
+; ARM64-NEXT:    lsr x2, x1, #32
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    strh w2, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i112 u0xF337133700000000F3371337, ptr %a
+  ret void
+}
+
+define void @store_i112_const3(ptr %a) {
+; X64-LABEL: <store_i112_const3>:
+; X64:         mov qword ptr [rdi], -0x2
+; X64-NEXT:    movabs rax, 0xffffffffffff
+; X64-NEXT:    mov dword ptr [rdi + 0x8], eax
+; X64-NEXT:    shr rax, 0x20
+; X64-NEXT:    mov word ptr [rdi + 0xc], ax
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i112_const3>:
+; ARM64:         mov x1, #-0x2 // =-2
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0xffffffffffff // =281474976710655
+; ARM64-NEXT:    lsr x2, x1, #32
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    strh w2, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i112 -2, ptr %a
+  ret void
+}
+
+
+define void @store_i120(ptr %a, i120 %b) {
+; X64-LABEL: <store_i120>:
+; X64:         mov qword ptr [rdi], rsi
+; X64-NEXT:    mov dword ptr [rdi + 0x8], edx
+; X64-NEXT:    mov rax, rdx
+; X64-NEXT:    shr rax, 0x30
+; X64-NEXT:    mov byte ptr [rdi + 0xe], al
+; X64-NEXT:    shr rdx, 0x20
+; X64-NEXT:    mov word ptr [rdi + 0xc], dx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i120>:
+; ARM64:         str x1, [x0]
+; ARM64-NEXT:    lsr x1, x2, #48
+; ARM64-NEXT:    lsr x3, x2, #32
+; ARM64-NEXT:    str w2, [x0, #0x8]
+; ARM64-NEXT:    strb w1, [x0, #0xe]
+; ARM64-NEXT:    strh w3, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i120 %b, ptr %a
+  ret void
+}
+
+define void @store_i120_alloca(i120 %b) {
+; X64-LABEL: <store_i120_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov qword ptr [rax], rdi
+; X64-NEXT:    mov dword ptr [rax + 0x8], esi
+; X64-NEXT:    mov rcx, rsi
+; X64-NEXT:    shr rcx, 0x30
+; X64-NEXT:    mov byte ptr [rax + 0xe], cl
+; X64-NEXT:    shr rsi, 0x20
+; X64-NEXT:    mov word ptr [rax + 0xc], si
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i120_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x2, x29, #0xa0
+; ARM64-NEXT:    str x0, [x2]
+; ARM64-NEXT:    lsr x0, x1, #48
+; ARM64-NEXT:    lsr x3, x1, #32
+; ARM64-NEXT:    str w1, [x2, #0x8]
+; ARM64-NEXT:    strb w0, [x2, #0xe]
+; ARM64-NEXT:    strh w3, [x2, #0xc]
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+  %a = alloca i120
+  store i120 %b, ptr %a
+  ret void
+}
+
+define void @store_i120_const1(ptr %a) {
+; X64-LABEL: <store_i120_const1>:
+; X64:         movabs rax, 0x1337133713371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    movabs rax, 0x37133713371337
+; X64-NEXT:    mov dword ptr [rdi + 0x8], eax
+; X64-NEXT:    mov rcx, rax
+; X64-NEXT:    shr rcx, 0x30
+; X64-NEXT:    mov byte ptr [rdi + 0xe], cl
+; X64-NEXT:    shr rax, 0x20
+; X64-NEXT:    mov word ptr [rdi + 0xc], ax
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i120_const1>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x1337, lsl #16
+; ARM64-NEXT:    movk x1, #0x1337, lsl #32
+; ARM64-NEXT:    movk x1, #0x1337, lsl #48
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0x1337, lsl #16
+; ARM64-NEXT:    movk x1, #0x1337, lsl #32
+; ARM64-NEXT:    movk x1, #0x37, lsl #48
+; ARM64-NEXT:    lsr x2, x1, #48
+; ARM64-NEXT:    lsr x3, x1, #32
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    strb w2, [x0, #0xe]
+; ARM64-NEXT:    strh w3, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i120 u0x371337133713371337133713371337, ptr %a
+  ret void
+}
+
+define void @store_i120_const2(ptr %a) {
+; X64-LABEL: <store_i120_const2>:
+; X64:         mov eax, 0xf3371337
+; X64-NEXT:    mov qword ptr [rdi], rax
+; X64-NEXT:    mov eax, 0xf3371337
+; X64-NEXT:    mov dword ptr [rdi + 0x8], eax
+; X64-NEXT:    mov rcx, rax
+; X64-NEXT:    shr rcx, 0x30
+; X64-NEXT:    mov byte ptr [rdi + 0xe], cl
+; X64-NEXT:    shr rax, 0x20
+; X64-NEXT:    mov word ptr [rdi + 0xc], ax
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i120_const2>:
+; ARM64:         mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0xf337, lsl #16
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0x1337 // =4919
+; ARM64-NEXT:    movk x1, #0xf337, lsl #16
+; ARM64-NEXT:    lsr x2, x1, #48
+; ARM64-NEXT:    lsr x3, x1, #32
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    strb w2, [x0, #0xe]
+; ARM64-NEXT:    strh w3, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i120 u0xF337133700000000F3371337, ptr %a
+  ret void
+}
+
+define void @store_i120_const3(ptr %a) {
+; X64-LABEL: <store_i120_const3>:
+; X64:         mov qword ptr [rdi], -0x2
+; X64-NEXT:    movabs rax, 0xffffffffffffff
+; X64-NEXT:    mov dword ptr [rdi + 0x8], eax
+; X64-NEXT:    mov rcx, rax
+; X64-NEXT:    shr rcx, 0x30
+; X64-NEXT:    mov byte ptr [rdi + 0xe], cl
+; X64-NEXT:    shr rax, 0x20
+; X64-NEXT:    mov word ptr [rdi + 0xc], ax
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <store_i120_const3>:
+; ARM64:         mov x1, #-0x2 // =-2
+; ARM64-NEXT:    str x1, [x0]
+; ARM64-NEXT:    mov x1, #0xffffffffffffff // =72057594037927935
+; ARM64-NEXT:    lsr x2, x1, #48
+; ARM64-NEXT:    lsr x3, x1, #32
+; ARM64-NEXT:    str w1, [x0, #0x8]
+; ARM64-NEXT:    strb w2, [x0, #0xe]
+; ARM64-NEXT:    strh w3, [x0, #0xc]
+; ARM64-NEXT:    ret
+entry:
+  store i120 -2, ptr %a
+  ret void
+}
+
+
 define void @store_i128(ptr %a, i128 %b) {
 ; X64-LABEL: <store_i128>:
 ; X64:         mov qword ptr [rdi + 0x8], rdx

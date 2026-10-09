@@ -168,6 +168,114 @@ entry:
     ret void
 }
 
+define i80 @shl_i80_3(i80 %0) {
+; X64-LABEL: <shl_i80_3>:
+; X64:         mov rax, rdi
+; X64-NEXT:    shl rax, 0x3
+; X64-NEXT:    shr rdi, 0x3d
+; X64-NEXT:    shl rsi, 0x3
+; X64-NEXT:    or rsi, rdi
+; X64-NEXT:    mov rdx, rsi
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <shl_i80_3>:
+; ARM64:         lsl x1, x1, #3
+; ARM64-NEXT:    lsl x2, x0, #3
+; ARM64-NEXT:    lsr x0, x0, #61
+; ARM64-NEXT:    orr x3, x0, x1
+; ARM64-NEXT:    mov x0, x2
+; ARM64-NEXT:    mov x1, x3
+; ARM64-NEXT:    ret
+entry:
+    %1 = shl i80 %0, 3
+    ret i80 %1
+}
+
+define i80 @shl_i80_64(i80 %0) {
+; X64-LABEL: <shl_i80_64>:
+; X64:         xor eax, eax
+; X64-NEXT:    mov rdx, rdi
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <shl_i80_64>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    mov w2, #0x0 // =0
+; ARM64-NEXT:    str x0, [x29, #0xa8]
+; ARM64-NEXT:    mov x0, x2
+; ARM64-NEXT:    ldr x1, [x29, #0xa8]
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+    %1 = shl i80 %0, 64
+    ret i80 %1
+}
+
+define i80 @shl_i80_74(i80 %0) {
+; X64-LABEL: <shl_i80_74>:
+; X64:         shl rdi, 0xa
+; X64-NEXT:    xor eax, eax
+; X64-NEXT:    mov rdx, rdi
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <shl_i80_74>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    lsl x0, x0, #10
+; ARM64-NEXT:    mov x2, xzr
+; ARM64-NEXT:    str x0, [x29, #0xa8]
+; ARM64-NEXT:    mov x0, x2
+; ARM64-NEXT:    ldr x1, [x29, #0xa8]
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+    %1 = shl i80 %0, 74
+    ret i80 %1
+}
+
+define i80 @shl_i80_i80(i80 %v, i80 %s) {
+; X64-LABEL: <shl_i80_i80>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    push rbx
+; X64-NEXT:    mov qword ptr [rbp - 0x38], rcx
+; X64-NEXT:    mov ecx, edx
+; X64-NEXT:    shl rsi, cl
+; X64-NEXT:    mov rax, rdi
+; X64-NEXT:    shr rax
+; X64-NEXT:    mov ecx, edx
+; X64-NEXT:    not cl
+; X64-NEXT:    shr rax, cl
+; X64-NEXT:    or rax, rsi
+; X64-NEXT:    mov ecx, edx
+; X64-NEXT:    shl rdi, cl
+; X64-NEXT:    xor ebx, ebx
+; X64-NEXT:    test dl, 0x40
+; X64-NEXT:    cmovne rax, rdi
+; X64-NEXT:    cmove rbx, rdi
+; X64-NEXT:    mov qword ptr [rbp - 0x38], rax
+; X64-NEXT:    mov rax, rbx
+; X64-NEXT:    mov rdx, qword ptr [rbp - 0x38]
+; X64-NEXT:    pop rbx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <shl_i80_i80>:
+; ARM64:         lsr x4, x0, #1
+; ARM64-NEXT:    mvn w5, w2
+; ARM64-NEXT:    lsl x1, x1, x2
+; ARM64-NEXT:    tst x2, #0x40
+; ARM64-NEXT:    lsr x4, x4, x5
+; ARM64-NEXT:    lsl x5, x0, x2
+; ARM64-NEXT:    orr x4, x1, x4
+; ARM64-NEXT:    csel x0, xzr, x5, ne
+; ARM64-NEXT:    csel x2, x5, x4, ne
+; ARM64-NEXT:    mov x1, x2
+; ARM64-NEXT:    ret
+  %r = shl i80 %v, %s
+  ret i80 %r
+}
+
 define i128 @shl_i128_3(i128 %0) {
 ; X64-LABEL: <shl_i128_3>:
 ; X64:         mov rax, rdi
@@ -191,6 +299,26 @@ entry:
     ret i128 %1
 }
 
+define i128 @shl_i128_64(i128 %0) {
+; X64-LABEL: <shl_i128_64>:
+; X64:         xor eax, eax
+; X64-NEXT:    mov rdx, rdi
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <shl_i128_64>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    mov w2, #0x0 // =0
+; ARM64-NEXT:    str x0, [x29, #0xa8]
+; ARM64-NEXT:    mov x0, x2
+; ARM64-NEXT:    ldr x1, [x29, #0xa8]
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+    %1 = shl i128 %0, 64
+    ret i128 %1
+}
+
 define i128 @shl_i128_74(i128 %0) {
 ; X64-LABEL: <shl_i128_74>:
 ; X64:         shl rdi, 0xa
@@ -210,29 +338,6 @@ define i128 @shl_i128_74(i128 %0) {
 ; ARM64-NEXT:    ret
 entry:
     %1 = shl i128 %0, 74
-    ret i128 %1
-}
-
-define i128 @shl_i128_128(i128 %0) {
-; X64-LABEL: <shl_i128_128>:
-; X64:         mov rax, rdi
-; X64-NEXT:    shl rax, 0x0
-; X64-NEXT:    shr rdi, 0x0
-; X64-NEXT:    shl rsi, 0x0
-; X64-NEXT:    or rsi, rdi
-; X64-NEXT:    mov rdx, rsi
-; X64-NEXT:    ret
-;
-; ARM64-LABEL: <shl_i128_128>:
-; ARM64:         lsr x1, x1, #0
-; ARM64-NEXT:    lsr x2, x0, #0
-; ARM64-NEXT:    lsr x0, x0, #0
-; ARM64-NEXT:    orr x3, x0, x1
-; ARM64-NEXT:    mov x0, x2
-; ARM64-NEXT:    mov x1, x3
-; ARM64-NEXT:    ret
-entry:
-    %1 = shl i128 %0, 128
     ret i128 %1
 }
 

@@ -232,6 +232,15 @@ public:
     return cur_reg();
   }
 
+  /// Load and lock a register for the value part. Does nothing if a register is
+  /// already allocated.
+  AsmReg cur_reg_or_load(CompilerBase *compiler) {
+    if (!has_reg()) {
+      alloc_reg_impl</*Reload=*/true>(compiler);
+    }
+    return cur_reg();
+  }
+
   /// Allocate, fill, and lock a specific register for the value part, spilling
   /// the register if it is currently used (must not be fixed). The value is
   /// moved (assignment updated) or reloaded to this register. Value part must
@@ -870,6 +879,8 @@ struct CompilerBase<Adaptor, Derived, Config>::ValuePartRef : ValuePart {
   void alloc_specific(AsmReg reg) { ValuePart::alloc_specific(compiler, reg); }
 
   AsmReg load_to_reg() { return ValuePart::load_to_reg(compiler); }
+
+  AsmReg cur_reg_or_load() { return ValuePart::cur_reg_or_load(compiler); }
 
   void load_to_specific(AsmReg reg) {
     ValuePart::load_to_specific(compiler, reg);

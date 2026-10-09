@@ -10,7 +10,7 @@
 
 namespace {
 
-__attribute__((visibility("default"))) extern "C" ::llvm::PassPluginLibraryInfo
+extern "C" __attribute__((visibility("default"))) ::llvm::PassPluginLibraryInfo
     llvmGetPassPluginInfo() {
   return llvm::PassPluginLibraryInfo{
       .APIVersion = LLVM_PLUGIN_API_VERSION,

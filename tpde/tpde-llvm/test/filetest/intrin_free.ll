@@ -5,6 +5,7 @@
 
 ; RUN: tpde-llc --target=x86_64 %s | %objdump | FileCheck %s -check-prefixes=X64
 ; RUN: tpde-llc --target=aarch64 %s | %objdump | FileCheck %s -check-prefixes=ARM64
+; XFAIL: llvm23.1
 
 define void @free_intrinsics(ptr %p) {
 ; X64-LABEL: <free_intrinsics>:

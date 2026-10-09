@@ -75,6 +75,8 @@ struct EncodingTarget {
 
   virtual std::string_view get_invalid_reg() = 0;
 
+  virtual bool supports_fixed_register_constraints() = 0;
+
   // Get all encoding candidates, the candidate without conditions must be
   // last
   virtual void get_inst_candidates(llvm::MachineInstr &,
@@ -89,6 +91,7 @@ struct EncodingTarget {
   // some registers, e.g. flags should be ignored for generation purposes
   virtual bool reg_should_be_ignored(llvm::MCRegister) = 0;
   virtual bool reg_is_flags(llvm::MCRegister) = 0;
+  virtual bool reg_is_sp(llvm::MCRegister) = 0;
   virtual void generate_copy(std::string &buf,
                              unsigned indent,
                              unsigned bank,

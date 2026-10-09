@@ -29,11 +29,13 @@ struct CompilerBase<Adaptor, Derived, Config>::ValueRef {
       : state{AssignmentData()}, compiler(compiler) {}
 
   ValueRef(CompilerBase *compiler, ValLocalIdx local_idx)
-      : state{AssignmentData{
+      : state{
+            AssignmentData{
                            .local_idx = local_idx,
                            .assignment = compiler->val_assignment(local_idx),
                            }
-  }, compiler(compiler) {
+  },
+        compiler(compiler) {
     assert(!state.a.assignment->pending_free && "access of free'd assignment");
 
     // Extended liveness checks in debug builds.

@@ -7,6 +7,7 @@
 ; XFAIL: llvm19.1
 ; XFAIL: llvm20.1
 ; XFAIL: llvm22.1
+; XFAIL: llvm23.1
 
 define i1 @is_snan_float(float %p) {
 ; X64-LABEL: <is_snan_float>:

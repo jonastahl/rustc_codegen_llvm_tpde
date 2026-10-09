@@ -221,6 +221,109 @@ define void @mul_i64_i64(i64 %0, i64 %1) {
     ret void
 }
 
+define void @mul_i80_1(i80 %0) {
+; X64-LABEL: <mul_i80_1>:
+; X64:         mov ecx, 0x1
+; X64-NEXT:    imul rsi, rcx
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rsi
+; X64-NEXT:    xor ecx, ecx
+; X64-NEXT:    imul rcx, rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <mul_i80_1>:
+; ARM64:         mov x2, #0x1 // =1
+; ARM64-NEXT:    umulh x3, x2, x0
+; ARM64-NEXT:    madd x3, x2, x1, x3
+; ARM64-NEXT:    mov w1, #0x0 // =0
+; ARM64-NEXT:    madd x1, x1, x0, x3
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    ret
+  entry:
+    %1 = mul nsw i80 %0, 1
+    ret void
+}
+
+define void @mul_i80_1_reorder(i80 %0) {
+; X64-LABEL: <mul_i80_1_reorder>:
+; X64:         mov ecx, 0x1
+; X64-NEXT:    imul rsi, rcx
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rsi
+; X64-NEXT:    xor ecx, ecx
+; X64-NEXT:    imul rcx, rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <mul_i80_1_reorder>:
+; ARM64:         mov x2, #0x1 // =1
+; ARM64-NEXT:    umulh x3, x2, x0
+; ARM64-NEXT:    madd x3, x2, x1, x3
+; ARM64-NEXT:    mov w1, #0x0 // =0
+; ARM64-NEXT:    madd x1, x1, x0, x3
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    ret
+  entry:
+    %1 = mul nsw i80 1, %0
+    ret void
+}
+
+define void @mul_i80_1001_1002(i80 %0) {
+; X64-LABEL: <mul_i80_1001_1002>:
+; X64:         mov ecx, 0x1002
+; X64-NEXT:    imul rsi, rcx
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rsi
+; X64-NEXT:    mov ecx, 0x1001
+; X64-NEXT:    imul rcx, rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <mul_i80_1001_1002>:
+; ARM64:         mov x2, #0x1002 // =4098
+; ARM64-NEXT:    umulh x3, x2, x0
+; ARM64-NEXT:    madd x3, x2, x1, x3
+; ARM64-NEXT:    mov x1, #0x1001 // =4097
+; ARM64-NEXT:    madd x1, x1, x0, x3
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    ret
+  entry:
+    %1 = mul nsw i80 %0, u0x10010000000000001002
+    ret void
+}
+
+define void @mul_i80_i80(i80 %0, i80 %1) {
+; X64-LABEL: <mul_i80_i80>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    push rbx
+; X64-NEXT:    mov qword ptr [rbp - 0x40], rdx
+; X64-NEXT:    imul rsi, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov rbx, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov rax, rbx
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rsi
+; X64-NEXT:    imul rcx, rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    pop rbx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <mul_i80_i80>:
+; ARM64:         umulh x4, x2, x0
+; ARM64-NEXT:    madd x4, x2, x1, x4
+; ARM64-NEXT:    madd x3, x3, x0, x4
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    ret
+  entry:
+    %2 = mul nsw i80 %0, %1
+    ret void
+}
+
 define void @mul_i128_1(i128 %0) {
 ; X64-LABEL: <mul_i128_1>:
 ; X64:         mov ecx, 0x1
@@ -325,6 +428,59 @@ define void @mul_i128_i128(i128 %0, i128 %1) {
 }
 
 
+
+define void @mul_i80_salvage_imm(i80 %0) {
+; X64-LABEL: <mul_i80_salvage_imm>:
+; X64:         mov ecx, 0x1
+; X64-NEXT:    imul rsi, rcx
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rsi
+; X64-NEXT:    xor ecx, ecx
+; X64-NEXT:    imul rcx, rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <mul_i80_salvage_imm>:
+; ARM64:         mov x2, #0x1 // =1
+; ARM64-NEXT:    umulh x3, x2, x0
+; ARM64-NEXT:    madd x3, x2, x1, x3
+; ARM64-NEXT:    mov w1, #0x0 // =0
+; ARM64-NEXT:    madd x1, x1, x0, x3
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    ret
+  entry:
+  %1 = mul nsw i80 %0, 1
+  ret void
+}
+
+define void @mul_i80_salvage_reg(i80 %0, i80 %1) {
+; X64-LABEL: <mul_i80_salvage_reg>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    push rbx
+; X64-NEXT:    mov qword ptr [rbp - 0x40], rdx
+; X64-NEXT:    imul rsi, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov rbx, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov rax, rbx
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rsi
+; X64-NEXT:    imul rcx, rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    pop rbx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <mul_i80_salvage_reg>:
+; ARM64:         umulh x4, x2, x0
+; ARM64-NEXT:    madd x4, x2, x1, x4
+; ARM64-NEXT:    madd x3, x3, x0, x4
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    ret
+  entry:
+  %2 = mul nsw i80 %0, %1
+  ret void
+}
 
 define void @mul_i128_salvage_imm(i128 %0) {
 ; X64-LABEL: <mul_i128_salvage_imm>:
@@ -449,6 +605,142 @@ entry:
     %2 = mul i37 %0, %1
     %3 = mul i37 %0, %2
     ret void
+}
+
+define void @mul_i80_no_salvage_imm_1(i80 %0) {
+; X64-LABEL: <mul_i80_no_salvage_imm_1>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    push rbx
+; X64-NEXT:    mov rcx, rsi
+; X64-NEXT:    mov ebx, 0x1
+; X64-NEXT:    imul rcx, rbx
+; X64-NEXT:    mov rax, rbx
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    xor ebx, ebx
+; X64-NEXT:    imul rbx, rdi
+; X64-NEXT:    add rdx, rbx
+; X64-NEXT:    mov qword ptr [rbp - 0x40], rax
+; X64-NEXT:    mov qword ptr [rbp - 0x38], rdx
+; X64-NEXT:    imul rsi, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov rcx, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rsi
+; X64-NEXT:    mov rcx, qword ptr [rbp - 0x38]
+; X64-NEXT:    imul rcx, rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    pop rbx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <mul_i80_no_salvage_imm_1>:
+; ARM64:         mov x2, #0x1 // =1
+; ARM64-NEXT:    umulh x3, x2, x0
+; ARM64-NEXT:    madd x3, x2, x1, x3
+; ARM64-NEXT:    mov w4, #0x0 // =0
+; ARM64-NEXT:    madd x4, x4, x0, x3
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    umulh x3, x2, x0
+; ARM64-NEXT:    madd x3, x2, x1, x3
+; ARM64-NEXT:    madd x4, x4, x0, x3
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    ret
+  entry:
+  %1 = mul nsw i80 %0, 1
+  %2 = mul nsw i80 %0, %1
+  ret void
+}
+
+define void @mul_i80_no_salvage_imm_1001_1002(i80 %0) {
+; X64-LABEL: <mul_i80_no_salvage_imm_1001_1002>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    push rbx
+; X64-NEXT:    mov rcx, rsi
+; X64-NEXT:    mov ebx, 0x1002
+; X64-NEXT:    imul rcx, rbx
+; X64-NEXT:    mov rax, rbx
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    mov ebx, 0x1001
+; X64-NEXT:    imul rbx, rdi
+; X64-NEXT:    add rdx, rbx
+; X64-NEXT:    mov qword ptr [rbp - 0x40], rax
+; X64-NEXT:    mov qword ptr [rbp - 0x38], rdx
+; X64-NEXT:    imul rsi, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov rcx, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rsi
+; X64-NEXT:    mov rcx, qword ptr [rbp - 0x38]
+; X64-NEXT:    imul rcx, rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    pop rbx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <mul_i80_no_salvage_imm_1001_1002>:
+; ARM64:         mov x2, #0x1002 // =4098
+; ARM64-NEXT:    umulh x3, x2, x0
+; ARM64-NEXT:    madd x3, x2, x1, x3
+; ARM64-NEXT:    mov x4, #0x1001 // =4097
+; ARM64-NEXT:    madd x4, x4, x0, x3
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    umulh x3, x2, x0
+; ARM64-NEXT:    madd x3, x2, x1, x3
+; ARM64-NEXT:    madd x4, x4, x0, x3
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    ret
+  entry:
+  %1 = mul nsw i80 %0, u0x10010000000000001002
+  %2 = mul nsw i80 %0, %1
+  ret void
+}
+
+define void @mul_i80_no_salvage_reg(i80 %0, i80 %1) {
+; X64-LABEL: <mul_i80_no_salvage_reg>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    push rbx
+; X64-NEXT:    mov qword ptr [rbp - 0x40], rdx
+; X64-NEXT:    mov rbx, rsi
+; X64-NEXT:    imul rbx, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov r8, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov rax, r8
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rbx
+; X64-NEXT:    imul rcx, rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    mov qword ptr [rbp - 0x40], rax
+; X64-NEXT:    mov qword ptr [rbp - 0x38], rdx
+; X64-NEXT:    imul rsi, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov rcx, qword ptr [rbp - 0x40]
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    mul rdi
+; X64-NEXT:    add rdx, rsi
+; X64-NEXT:    mov rcx, qword ptr [rbp - 0x38]
+; X64-NEXT:    imul rcx, rdi
+; X64-NEXT:    add rdx, rcx
+; X64-NEXT:    pop rbx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <mul_i80_no_salvage_reg>:
+; ARM64:         umulh x4, x2, x0
+; ARM64-NEXT:    madd x4, x2, x1, x4
+; ARM64-NEXT:    madd x3, x3, x0, x4
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    umulh x4, x2, x0
+; ARM64-NEXT:    madd x4, x2, x1, x4
+; ARM64-NEXT:    madd x3, x3, x0, x4
+; ARM64-NEXT:    mul x2, x2, x0
+; ARM64-NEXT:    ret
+  entry:
+  %2 = mul nsw i80 %0, %1
+  %3 = mul nsw i80 %0, %2
+  ret void
 }
 
 define void @mul_i128_no_salvage_imm_1(i128 %0) {

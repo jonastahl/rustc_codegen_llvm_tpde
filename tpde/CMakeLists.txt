@@ -36,6 +36,11 @@ option(TPDE_ENABLE_ASAN "Enable AddressSanitizer" ${TPDE_ENABLE_ASAN_default})
 option(TPDE_BUILD_DOCS "Build documentation" OFF)
 option(TPDE_ENABLE_EH "Build with exception handling" OFF)
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
+    # Workaround for GCC 16 miscompile of arrays of member function pointers.
+    # Bug report: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=126310
+    add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:--param;vrp-cstload-limit=0>")
+endif ()
 
 find_program(WILD_PROGRAM wild)
 if (WILD_PROGRAM)
@@ -137,7 +142,7 @@ if (TPDE_ENABLE_ENCODEGEN OR TPDE_ENABLE_LLVM)
     # LLVM versions we currently support. The first version should be the
     # "primary" versions where all tests pass (i.e., no XFAIL due to different
     # code generation).
-    set(TPDE_LLVM_SUPPORTED_VERSIONS 21.1 22.1 20.1 19.1)
+    set(TPDE_LLVM_SUPPORTED_VERSIONS 21.1 23.1 22.1 20.1 19.1)
 
     # allow overriding the LLVM version used
     if (DEFINED LLVM_DIR)
@@ -145,7 +150,8 @@ if (TPDE_ENABLE_ENCODEGEN OR TPDE_ENABLE_LLVM)
     endif ()
     foreach (VERSION ${TPDE_LLVM_SUPPORTED_VERSIONS})
         if (NOT LLVM_FOUND)
-            find_package(LLVM ${VERSION} CONFIG)
+            # "Optional" to suppress CMake warnings as we probe multiple versions.
+            find_package(LLVM ${VERSION} QUIET CONFIG)
         endif ()
     endforeach ()
     if (NOT LLVM_FOUND)

@@ -409,6 +409,14 @@ struct CompilerA64 : BaseTy<Adaptor, Derived, Config> {
 
   void load_address_of_stack_var(AsmReg dst, AssignmentPartRef ap);
 
+  /// Load from an base+offset into register, using permanent_scratch_reg for
+  /// large offsets.
+  void load_off(AsmReg dst, AsmReg base, u32 off, u32 size, bool sext = false);
+
+  /// Store a register to base+offset, using permanent_scratch_reg for large
+  /// offsets.
+  void store_off(AsmReg base, u32 off, AsmReg src, u32 size);
+
   void mov(AsmReg dst, AsmReg src, u32 size);
 
   GenericValuePart val_spill_slot(AssignmentPartRef ap) {
@@ -602,28 +610,31 @@ template <IRAdaptor Adaptor,
 void CompilerA64<Adaptor, Derived, BaseTy, Config>::CallBuilder::add_arg_byval(
     ValuePart &vp, CCAssignment &cca) {
   AsmReg ptr_reg = vp.load_to_reg(&this->compiler);
-  AsmReg tmp_reg = AsmReg::R16;
+  // store_off might clobber permanent_scratch_reg.
+  ScratchReg scratch{&this->compiler};
+  AsmReg tmp = scratch.alloc_gp();
 
-  auto size = cca.size;
+  u32 size = cca.size;
+  u32 off = 0;
   set_stack_used();
-  for (u32 off = 0; off < size;) {
-    if (size - off >= 8) {
-      ASMC(&this->compiler, LDRxu, tmp_reg, ptr_reg, off);
-      ASMC(&this->compiler, STRxu, tmp_reg, DA_SP, cca.stack_off + off);
-      off += 8;
-    } else if (size - off >= 4) {
-      ASMC(&this->compiler, LDRwu, tmp_reg, ptr_reg, off);
-      ASMC(&this->compiler, STRwu, tmp_reg, DA_SP, cca.stack_off + off);
-      off += 4;
-    } else if (size - off >= 2) {
-      ASMC(&this->compiler, LDRHu, tmp_reg, ptr_reg, off);
-      ASMC(&this->compiler, STRHu, tmp_reg, DA_SP, cca.stack_off + off);
-      off += 2;
-    } else {
-      ASMC(&this->compiler, LDRBu, tmp_reg, ptr_reg, off);
-      ASMC(&this->compiler, STRBu, tmp_reg, DA_SP, cca.stack_off + off);
-      off += 1;
-    }
+  while (size - off >= 8) {
+    this->compiler.load_off(tmp, ptr_reg, off, 8);
+    this->compiler.store_off(AsmReg{AsmReg::SP}, cca.stack_off + off, tmp, 8);
+    off += 8;
+  }
+  if (size - off >= 4) {
+    this->compiler.load_off(tmp, ptr_reg, off, 4);
+    this->compiler.store_off(AsmReg{AsmReg::SP}, cca.stack_off + off, tmp, 4);
+    off += 4;
+  }
+  if (size - off >= 2) {
+    this->compiler.load_off(tmp, ptr_reg, off, 2);
+    this->compiler.store_off(AsmReg{AsmReg::SP}, cca.stack_off + off, tmp, 2);
+    off += 2;
+  }
+  if (size - off >= 1) {
+    this->compiler.load_off(tmp, ptr_reg, off, 1);
+    this->compiler.store_off(AsmReg{AsmReg::SP}, cca.stack_off + off, tmp, 1);
   }
 }
 
@@ -634,27 +645,8 @@ template <IRAdaptor Adaptor,
 void CompilerA64<Adaptor, Derived, BaseTy, Config>::CallBuilder::add_arg_stack(
     ValuePart &vp, CCAssignment &cca) {
   set_stack_used();
-
-  auto reg = vp.has_reg() ? vp.cur_reg() : vp.load_to_reg(&this->compiler);
-  if (this->compiler.register_file.reg_bank(reg) == Config::GP_BANK) {
-    switch (cca.size) {
-    case 1: ASMC(&this->compiler, STRBu, reg, DA_SP, cca.stack_off); break;
-    case 2: ASMC(&this->compiler, STRHu, reg, DA_SP, cca.stack_off); break;
-    case 4: ASMC(&this->compiler, STRwu, reg, DA_SP, cca.stack_off); break;
-    case 8: ASMC(&this->compiler, STRxu, reg, DA_SP, cca.stack_off); break;
-    default: TPDE_UNREACHABLE("invalid GP reg size");
-    }
-  } else {
-    assert(this->compiler.register_file.reg_bank(reg) == Config::FP_BANK);
-    switch (cca.size) {
-    case 1: ASMC(&this->compiler, STRbu, reg, DA_SP, cca.stack_off); break;
-    case 2: ASMC(&this->compiler, STRhu, reg, DA_SP, cca.stack_off); break;
-    case 4: ASMC(&this->compiler, STRsu, reg, DA_SP, cca.stack_off); break;
-    case 8: ASMC(&this->compiler, STRdu, reg, DA_SP, cca.stack_off); break;
-    case 16: ASMC(&this->compiler, STRqu, reg, DA_SP, cca.stack_off); break;
-    default: TPDE_UNREACHABLE("invalid FP reg size");
-    }
-  }
+  auto reg = vp.cur_reg_or_load(&this->compiler);
+  this->compiler.store_off(AsmReg{AsmReg::SP}, cca.stack_off, reg, cca.size);
 }
 
 template <IRAdaptor Adaptor,
@@ -785,7 +777,6 @@ std::optional<i32>
 
   AsmReg dst = vp.alloc_reg(this);
 
-  this->text_writer.ensure_space(8);
   AsmReg stack_reg = AsmReg::R17;
   // TODO: allocate an actual scratch register for this.
   assert(!(this->register_file.allocatable & (u64{1} << stack_reg.id())) &&
@@ -794,29 +785,16 @@ std::optional<i32>
     this->func_arg_stack_add_off = this->text_writer.offset();
     this->func_arg_stack_add_reg = stack_reg;
     // Fixed in finish_func when frame size is known
-    ASMNC(ADDxi, stack_reg, DA_SP, 0);
+    ASM(ADDxi, stack_reg, DA_SP, 0);
   }
 
   if (cca.byval) {
-    ASMNC(ADDxi, dst, stack_reg, cca.stack_off);
-  } else if (cca.bank == Config::GP_BANK) {
-    switch (cca.size) {
-    case 1: ASMNC(LDRBu, dst, stack_reg, cca.stack_off); break;
-    case 2: ASMNC(LDRHu, dst, stack_reg, cca.stack_off); break;
-    case 4: ASMNC(LDRwu, dst, stack_reg, cca.stack_off); break;
-    case 8: ASMNC(LDRxu, dst, stack_reg, cca.stack_off); break;
-    default: TPDE_UNREACHABLE("invalid GP reg size");
+    if (!ASMIF(ADDxi, dst, stack_reg, cca.stack_off)) {
+      materialize_constant(cca.stack_off, Config::GP_BANK, 8, dst);
+      ASM(ADDx, dst, stack_reg, dst);
     }
   } else {
-    assert(cca.bank == Config::FP_BANK);
-    switch (cca.size) {
-    case 1: ASMNC(LDRbu, dst, stack_reg, cca.stack_off); break;
-    case 2: ASMNC(LDRhu, dst, stack_reg, cca.stack_off); break;
-    case 4: ASMNC(LDRsu, dst, stack_reg, cca.stack_off); break;
-    case 8: ASMNC(LDRdu, dst, stack_reg, cca.stack_off); break;
-    case 16: ASMNC(LDRqu, dst, stack_reg, cca.stack_off); break;
-    default: TPDE_UNREACHABLE("invalid FP reg size");
-    }
+    this->load_off(dst, stack_reg, cca.stack_off, cca.size);
   }
   return {};
 }
@@ -1093,38 +1071,7 @@ void CompilerA64<Adaptor, Derived, BaseTy, Config>::spill_reg(
   assert(this->stack.frame_used);
   assert((size & (size - 1)) == 0);
   assert(util::align_up(frame_off, size) == frame_off);
-  // We don't support stack frames that aren't encodeable with add/sub.
-  assert(frame_off < 0x1'000'000);
-  this->text_writer.ensure_space(8);
-
-  u32 off = frame_off;
-  auto addr_base = AsmReg{AsmReg::FP};
-  if (off >= 0x1000 * size) [[unlikely]] {
-    // We cannot encode the offset in the store instruction.
-    ASMNC(ADDxi, permanent_scratch_reg, DA_GP(29), off & ~0xfff);
-    off &= 0xfff;
-    addr_base = permanent_scratch_reg;
-  }
-
-  assert(-static_cast<i32>(frame_off) < 0);
-  if (reg.id() <= AsmReg::R30) {
-    switch (size) {
-    case 1: ASMNC(STRBu, reg, addr_base, off); break;
-    case 2: ASMNC(STRHu, reg, addr_base, off); break;
-    case 4: ASMNC(STRwu, reg, addr_base, off); break;
-    case 8: ASMNC(STRxu, reg, addr_base, off); break;
-    default: TPDE_UNREACHABLE("invalid register spill size");
-    }
-  } else {
-    switch (size) {
-    case 1: ASMNC(STRbu, reg, addr_base, off); break;
-    case 2: ASMNC(STRhu, reg, addr_base, off); break;
-    case 4: ASMNC(STRsu, reg, addr_base, off); break;
-    case 8: ASMNC(STRdu, reg, addr_base, off); break;
-    case 16: ASMNC(STRqu, reg, addr_base, off); break;
-    default: TPDE_UNREACHABLE("invalid register spill size");
-    }
-  }
+  this->store_off(AsmReg{AsmReg::FP}, frame_off, reg, size);
 }
 
 template <IRAdaptor Adaptor,
@@ -1139,50 +1086,7 @@ void CompilerA64<Adaptor, Derived, BaseTy, Config>::load_from_stack(
   assert(this->stack.frame_used);
   assert((size & (size - 1)) == 0);
   assert(util::align_up(frame_off, size) == frame_off);
-  // We don't support stack frames that aren't encodeable with add/sub.
-  assert(frame_off >= 0 && frame_off < 0x1'000'000);
-  this->text_writer.ensure_space(8);
-
-  u32 off = frame_off;
-  auto addr_base = AsmReg{AsmReg::FP};
-  if (off >= 0x1000 * size) [[unlikely]] {
-    // need to calculate this explicitly
-    addr_base = dst.id() <= AsmReg::R30 ? dst : permanent_scratch_reg;
-    ASMNC(ADDxi, addr_base, DA_GP(29), off & ~0xfff);
-    off &= 0xfff;
-  }
-
-  if (dst.id() <= AsmReg::R30) {
-    if (!sign_extend) {
-      switch (size) {
-      case 1: ASMNC(LDRBu, dst, addr_base, off); break;
-      case 2: ASMNC(LDRHu, dst, addr_base, off); break;
-      case 4: ASMNC(LDRwu, dst, addr_base, off); break;
-      case 8: ASMNC(LDRxu, dst, addr_base, off); break;
-      default: TPDE_UNREACHABLE("invalid register spill size");
-      }
-    } else {
-      switch (size) {
-      case 1: ASMNC(LDRSBwu, dst, addr_base, off); break;
-      case 2: ASMNC(LDRSHwu, dst, addr_base, off); break;
-      case 4: ASMNC(LDRSWxu, dst, addr_base, off); break;
-      case 8: ASMNC(LDRxu, dst, addr_base, off); break;
-      default: TPDE_UNREACHABLE("invalid register spill size");
-      }
-    }
-    return;
-  }
-
-  assert(!sign_extend);
-
-  switch (size) {
-  case 1: ASMNC(LDRbu, dst, addr_base, off); break;
-  case 2: ASMNC(LDRhu, dst, addr_base, off); break;
-  case 4: ASMNC(LDRsu, dst, addr_base, off); break;
-  case 8: ASMNC(LDRdu, dst, addr_base, off); break;
-  case 16: ASMNC(LDRqu, dst, addr_base, off); break;
-  default: TPDE_UNREACHABLE("invalid register spill size");
-  }
+  this->load_off(dst, AsmReg{AsmReg::FP}, frame_off, size, sign_extend);
 }
 
 template <IRAdaptor Adaptor,
@@ -1197,6 +1101,105 @@ void CompilerA64<Adaptor, Derived, BaseTy, Config>::load_address_of_stack_var(
   if (!ASMIF(ADDxi, dst, DA_GP(29), frame_off)) {
     materialize_constant(frame_off, Config::GP_BANK, 4, dst);
     ASM(ADDx_uxtw, dst, DA_GP(29), dst, 0);
+  }
+}
+
+template <IRAdaptor Adaptor,
+          typename Derived,
+          template <typename, typename, typename> typename BaseTy,
+          typename Config>
+void CompilerA64<Adaptor, Derived, BaseTy, Config>::load_off(
+    AsmReg dst, AsmReg base, u32 off, u32 size, bool sext) {
+  assert(size > 0 && (size & (size - 1)) == 0 && "size must be power of two");
+  u32 off_mask = 0xfff * size;
+  if (off & ~off_mask) [[unlikely]] {
+    // need to calculate this explicitly
+    AsmReg old_base = base;
+    base = dst.id() <= AsmReg::R30 ? dst : permanent_scratch_reg;
+    if (ASMIF(ADDxi, base, old_base, off & ~off_mask)) {
+      off &= off_mask;
+    } else {
+      materialize_constant(off, Config::GP_BANK, 8, base);
+      ASM(ADDx, base, base, old_base);
+      off = 0;
+    }
+  }
+
+  this->text_writer.ensure_space(4);
+  if (dst.id() <= AsmReg::R30) {
+    if (!sext) {
+      switch (size) {
+      case 1: ASMNC(LDRBu, dst, base, off); break;
+      case 2: ASMNC(LDRHu, dst, base, off); break;
+      case 4: ASMNC(LDRwu, dst, base, off); break;
+      case 8: ASMNC(LDRxu, dst, base, off); break;
+      default: TPDE_UNREACHABLE("invalid register size");
+      }
+    } else {
+      switch (size) {
+      case 1: ASMNC(LDRSBwu, dst, base, off); break;
+      case 2: ASMNC(LDRSHwu, dst, base, off); break;
+      case 4: ASMNC(LDRSWxu, dst, base, off); break;
+      case 8: ASMNC(LDRxu, dst, base, off); break;
+      default: TPDE_UNREACHABLE("invalid register size");
+      }
+    }
+    return;
+  }
+
+  assert(!sext);
+
+  switch (size) {
+  case 1: ASMNC(LDRbu, dst, base, off); break;
+  case 2: ASMNC(LDRhu, dst, base, off); break;
+  case 4: ASMNC(LDRsu, dst, base, off); break;
+  case 8: ASMNC(LDRdu, dst, base, off); break;
+  case 16: ASMNC(LDRqu, dst, base, off); break;
+  default: TPDE_UNREACHABLE("invalid register size");
+  }
+}
+
+template <IRAdaptor Adaptor,
+          typename Derived,
+          template <typename, typename, typename> typename BaseTy,
+          typename Config>
+void CompilerA64<Adaptor, Derived, BaseTy, Config>::store_off(AsmReg base,
+                                                              u32 off,
+                                                              AsmReg src,
+                                                              u32 size) {
+  this->text_writer.ensure_space(8);
+
+  assert(size > 0 && (size & (size - 1)) == 0 && "size must be power of two");
+  u32 off_mask = 0xfff * size;
+  if (off & ~off_mask) [[unlikely]] {
+    // need to calculate this explicitly
+    if (ASMIF(ADDxi, permanent_scratch_reg, base, off & ~off_mask)) {
+      off &= off_mask;
+    } else {
+      materialize_constant(off, Config::GP_BANK, 8, permanent_scratch_reg);
+      ASM(ADDx, permanent_scratch_reg, permanent_scratch_reg, base);
+      off = 0;
+    }
+    base = permanent_scratch_reg;
+  }
+
+  if (src.id() <= AsmReg::R30) {
+    switch (size) {
+    case 1: ASMNC(STRBu, src, base, off); break;
+    case 2: ASMNC(STRHu, src, base, off); break;
+    case 4: ASMNC(STRwu, src, base, off); break;
+    case 8: ASMNC(STRxu, src, base, off); break;
+    default: TPDE_UNREACHABLE("invalid srcister size");
+    }
+  } else {
+    switch (size) {
+    case 1: ASMNC(STRbu, src, base, off); break;
+    case 2: ASMNC(STRhu, src, base, off); break;
+    case 4: ASMNC(STRsu, src, base, off); break;
+    case 8: ASMNC(STRdu, src, base, off); break;
+    case 16: ASMNC(STRqu, src, base, off); break;
+    default: TPDE_UNREACHABLE("invalid register size");
+    }
   }
 }
 

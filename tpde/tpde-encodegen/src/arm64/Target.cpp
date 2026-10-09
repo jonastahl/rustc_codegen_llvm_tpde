@@ -118,23 +118,30 @@ void EncodingTargetArm64::get_inst_candidates(
       }
     });
   };
-  const auto handle_mem_simm = [&](std::string_view mnem, bool with_update) {
-    candidates.emplace_back(
-        [mnem, with_update](llvm::raw_ostream &os,
-                            const llvm::MachineInstr &mi,
-                            std::span<const std::string> ops) {
-          os << "    ASMD(" << mnem << ", ";
-          unsigned op_idx = with_update ? 1 : 0;
-          if (mi.getOperand(with_update).isImm()) {
-            os << "(Da64PrfOp)" << mi.getOperand(with_update).getImm();
-          } else {
-            os << format_reg(mi.getOperand(with_update), ops[op_idx]);
-            op_idx += 1;
-          }
-          os << ", " << format_reg(mi.getOperand(with_update + 1), ops[op_idx]);
-          os << ", " << mi.getOperand(with_update + 2).getImm() << ");\n";
-        });
-  };
+  const auto handle_mem_simm =
+      [&](std::string_view mnem, bool with_update, bool pair, unsigned scale) {
+        candidates.emplace_back(
+            [mnem, with_update, pair, scale](llvm::raw_ostream &os,
+                                             const llvm::MachineInstr &mi,
+                                             std::span<const std::string> ops) {
+              os << "    ASMD(" << mnem << ", ";
+              unsigned op_idx = with_update ? 1 : 0;
+              auto mop_it = mi.operands_begin();
+              if (with_update) {
+                ++mop_it; // Skip written-back operand.
+              }
+              if (mop_it->isImm()) {
+                assert(!pair);
+                os << "(Da64PrfOp)" << (mop_it++)->getImm();
+              } else {
+                for (unsigned i = 0; i < (pair ? 2 : 1); ++i) {
+                  os << format_reg(*(mop_it++), ops[op_idx++]) << ", ";
+                }
+              }
+              os << format_reg(*(mop_it++), ops[op_idx]);
+              os << ", " << (mop_it++)->getImm() * scale << ");\n";
+            });
+      };
   const auto handle_shift_imm = [&](std::string_view mnem, unsigned size) {
     candidates.emplace_back(
         2,
@@ -291,9 +298,10 @@ void EncodingTargetArm64::get_inst_candidates(
   };
 
   const auto case_default = [&](std::string_view mnem_llvm,
-                                std::string_view mnem_disarm) {
+                                std::string_view mnem_disarm,
+                                std::string extra_ops = "") {
     if (std::string_view{Name} == mnem_llvm) {
-      handle_default(mnem_disarm);
+      handle_default(mnem_disarm, std::move(extra_ops));
     }
   };
 
@@ -304,21 +312,23 @@ void EncodingTargetArm64::get_inst_candidates(
   }
 
   case_default("MRS", "MRS");
+  case_default("MRS_FPCR", "MRS", ", 0xda20");
 
   const auto case_mov_shift = [&](std::string_view mnem_llvm,
-                                  std::string_view mnem_disarm) {
+                                  std::string_view mnem_disarm,
+                                  bool is_movk = false) {
     if (std::string_view{Name} == mnem_llvm) {
-      unsigned imm = mi.getOperand(1).getImm();
-      unsigned shift = mi.getOperand(2).getImm();
+      unsigned imm = mi.getOperand(1 + is_movk).getImm();
+      unsigned shift = mi.getOperand(2 + is_movk).getImm();
       handle_noimm(mnem_disarm, std::format(", {:#x}, {}", imm, shift / 16));
     }
   };
   case_mov_shift("MOVZWi", "MOVZw_shift");
   case_mov_shift("MOVZXi", "MOVZx_shift");
-  case_mov_shift("MOVKWi", "MOVKw_shift");
-  case_mov_shift("MOVKXi", "MOVKx_shift");
   case_mov_shift("MOVNWi", "MOVNw_shift");
   case_mov_shift("MOVNXi", "MOVNx_shift");
+  case_mov_shift("MOVKWi", "MOVKw_shift", true);
+  case_mov_shift("MOVKXi", "MOVKx_shift", true);
 
   const auto case_mem_unsigned = [&](std::string_view mnem_llvm,
                                      std::string_view mnem,
@@ -367,27 +377,31 @@ void EncodingTargetArm64::get_inst_candidates(
     handle_noimm(mnems[sign], std::format(", {}", shift));
   }
 
-  const auto case_mem_signed =
-      [&](std::string_view mnem_llvm, std::string_view mnem, bool with_update) {
-        if (std::string_view{Name} == mnem_llvm) {
-          // TODO: encode optimization
-          handle_mem_simm(mnem, with_update);
-        }
-      };
-  case_mem_signed("STRWpre", "STRw_pre", true);
-  case_mem_signed("STRXpre", "STRx_pre", true);
-  case_mem_signed("STRBpre", "STRb_pre", true);
-  case_mem_signed("STRHpre", "STRh_pre", true);
-  case_mem_signed("STRSpre", "STRs_pre", true);
-  case_mem_signed("STRDpre", "STRd_pre", true);
-  case_mem_signed("STRQpre", "STRq_pre", true);
-  case_mem_signed("LDRWpost", "LDRw_post", true);
-  case_mem_signed("LDRXpost", "LDRx_post", true);
-  case_mem_signed("LDRBpost", "LDRb_post", true);
-  case_mem_signed("LDRHpost", "LDRh_post", true);
-  case_mem_signed("LDRSpost", "LDRs_post", true);
-  case_mem_signed("LDRDpost", "LDRd_post", true);
-  case_mem_signed("LDRQpost", "LDRq_post", true);
+  const auto case_mem_signed = [&](std::string_view mnem_llvm,
+                                   std::string_view mnem,
+                                   bool with_update,
+                                   bool pair,
+                                   unsigned scale = 1) {
+    if (std::string_view{Name} == mnem_llvm) {
+      // TODO: encode optimization
+      handle_mem_simm(mnem, with_update, pair, scale);
+    }
+  };
+  case_mem_signed("STRWpre", "STRw_pre", true, false);
+  case_mem_signed("STRXpre", "STRx_pre", true, false);
+  case_mem_signed("STRBpre", "STRb_pre", true, false);
+  case_mem_signed("STRHpre", "STRh_pre", true, false);
+  case_mem_signed("STRSpre", "STRs_pre", true, false);
+  case_mem_signed("STRDpre", "STRd_pre", true, false);
+  case_mem_signed("STRQpre", "STRq_pre", true, false);
+  case_mem_signed("LDRWpost", "LDRw_post", true, false);
+  case_mem_signed("LDRXpost", "LDRx_post", true, false);
+  case_mem_signed("LDRBpost", "LDRb_post", true, false);
+  case_mem_signed("LDRHpost", "LDRh_post", true, false);
+  case_mem_signed("LDRSpost", "LDRs_post", true, false);
+  case_mem_signed("LDRDpost", "LDRd_post", true, false);
+  case_mem_signed("LDRQpost", "LDRq_post", true, false);
+  case_mem_signed("STPQpre", "STPq_pre", true, true, 16);
 
   case_default("LDPWi", "LDPw");    // TODO: expr with base+off, merge offsets
   case_default("LDPXi", "LDPx");    // TODO: expr with base+off, merge offsets
@@ -806,6 +820,8 @@ void EncodingTargetArm64::get_inst_candidates(
   case_default("ZIP1v2i32", "ZIP1_2s");
   case_default("ZIP1v4i32", "ZIP1_4s");
   case_default("ZIP1v2i64", "ZIP1_2d");
+  case_default("TBLv8i8One", "TBL1_8b");
+  case_default("TBLv16i8One", "TBL1_16b");
 
   case_default("USHLv8i8", "USHL8b");
   case_default("USHLv16i8", "USHL16b");
@@ -903,6 +919,7 @@ void EncodingTargetArm64::get_inst_candidates(
   case_default("FMOVWSr", "FMOVsw");
   case_default("FMOVXDr", "FMOVdx");
   case_default("UMOVvi64", "UMOVxd");
+  case_default("UMOVvi16_idx0", "UMOVwh");
   case_default("INSvi8gpr", "INSbw");
   case_default("INSvi16gpr", "INShw");
   case_default("INSvi32gpr", "INSsw");

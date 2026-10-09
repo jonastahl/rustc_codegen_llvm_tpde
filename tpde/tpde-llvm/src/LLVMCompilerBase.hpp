@@ -182,8 +182,12 @@ struct LLVMCompilerBase : public LLVMCompiler,
     ceil,
     roundf,
     round,
+    nearbyintf,
+    nearbyint,
     rintf,
     rint,
+    lround,
+    lroundf,
     memcpy,
     memset,
     memmove,
@@ -192,14 +196,34 @@ struct LLVMCompilerBase : public LLVMCompiler,
     powidf2,
     trunc,
     truncf,
+    fma,
+    fmaf,
     pow,
     powf,
     sin,
     sinf,
     cos,
     cosf,
+    tan,
+    tanf,
+    asin,
+    asinf,
+    acos,
+    acosf,
+    atan,
+    atanf,
+    atan2,
+    atan2f,
+    sinh,
+    sinhf,
+    cosh,
+    coshf,
+    tanh,
+    tanhf,
     log,
     logf,
+    logl,
+    logf128,
     log2,
     log2f,
     log10,
@@ -208,6 +232,10 @@ struct LLVMCompilerBase : public LLVMCompiler,
     expf,
     exp2,
     exp2f,
+    modf,
+    modff,
+    frexp,
+    frexpf,
     trunctfsf2,
     trunctfdf2,
     extendsftf2,
@@ -435,6 +463,7 @@ public:
   bool compile_inst(const llvm::Instruction *, InstRange);
 
   bool compile_unreachable(const llvm::Instruction *, const ValInfo &, u64);
+  bool compile_br(const llvm::Instruction *, const ValInfo &, u64);
   bool compile_ret(const llvm::Instruction *, const ValInfo &, u64);
   bool compile_load_generic(const llvm::LoadInst *, GenericValuePart &&);
   bool compile_load(const llvm::Instruction *, const ValInfo &, u64);
@@ -475,6 +504,7 @@ public:
   bool compile_atomicrmw(const llvm::Instruction *, const ValInfo &, u64);
   bool compile_fence(const llvm::Instruction *, const ValInfo &, u64);
   bool compile_freeze(const llvm::Instruction *, const ValInfo &, u64);
+  bool handle_call(const llvm::CallBase *, const ValInfo &, SymRef = {});
   bool compile_call(const llvm::Instruction *, const ValInfo &, u64);
   bool compile_select(const llvm::Instruction *, const ValInfo &, u64);
   bool compile_alloca(const llvm::Instruction *, const ValInfo &, u64);
@@ -491,10 +521,6 @@ public:
   bool compile_saturating_intrin(const llvm::IntrinsicInst *, OverflowOp);
   bool compile_vector_reduce(const llvm::IntrinsicInst *, const ValInfo &);
 
-
-  bool compile_br(const llvm::Instruction *, const ValInfo &, u64) {
-    return false;
-  }
 
   bool compile_inline_asm(const llvm::CallBase *) { return false; }
 
@@ -650,10 +676,24 @@ typename LLVMCompilerBase<Adaptor, Derived, Config>::ValuePart
     TPDE_FATAL("non-sequential vector constants should not be legal");
   }
 
+  const auto handle_splat_constant = [this, ty, size, bank](u64 splat_val) {
+    auto [nelem, scalar] = basic_ty_vector_info(ty);
+    unsigned elemsz = size / nelem;
+    // Always allocate one extra u64 to simplify copying.
+    u64 *copy = new (const_allocator) u64[size / 8 + 1];
+    for (unsigned i = 0; i < size; i += elemsz) {
+      std::memcpy(reinterpret_cast<u8 *>(copy) + i, &splat_val, sizeof(u64));
+    }
+    return ValuePart(copy, size, bank);
+  };
+
   if (const auto *const_int = llvm::dyn_cast<llvm::ConstantInt>(const_val)) {
     assert(sub_part < (ty == LLVMBasicValType::i128 ? 2 : 1));
     assert(size <= 8 && "multi-word integer as single part?");
     const u64 *data = const_int->getValue().getRawData();
+    if (ty >= LLVMBasicValType::v8i8) [[unlikely]] {
+      return handle_splat_constant(data[0]);
+    }
     return ValuePart(data[sub_part], size, bank);
   }
 
@@ -662,6 +702,10 @@ typename LLVMCompilerBase<Adaptor, Derived, Config>::ValuePart
     // APFloat has no bitwise storage of the floating-point number and
     // bitcastToAPInt constructs a new APInt, so we need to copy the value.
     llvm::APInt int_val = const_fp->getValue().bitcastToAPInt();
+    if (ty >= LLVMBasicValType::v8i8) [[unlikely]] {
+      assert(int_val.getNumWords() == 1 && "multi-word vector fp element?");
+      return handle_splat_constant(int_val.getZExtValue());
+    }
     u64 *data = new (const_allocator) u64[int_val.getNumWords()];
     std::memcpy(
         data, int_val.getRawData(), int_val.getNumWords() * sizeof(u64));
@@ -1120,24 +1164,37 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::global_init_to_data(
       // i32 trunc (i64 sub (i64 ptrtoint (ptr <someglobal> to i64), i64
       // ptrtoint (ptr <relocBase> to i64)))
       if (expr->getType()->isIntegerTy(32)) {
-        if (auto *sub = llvm::dyn_cast<llvm::ConstantExpr>(expr->getOperand(0));
-            sub && sub->getOpcode() == llvm::Instruction::Sub &&
-            sub->getType()->isIntegerTy(64)) {
-          auto *lhs = llvm::dyn_cast<llvm::ConstantExpr>(sub->getOperand(0));
-          auto *rhs = llvm::dyn_cast<llvm::ConstantExpr>(sub->getOperand(1));
-          if (lhs && rhs && lhs->getOpcode() == llvm::Instruction::PtrToInt &&
-              rhs->getOpcode() == llvm::Instruction::PtrToInt) {
-            if (rhs->getOperand(0) == reloc_base &&
-                llvm::isa<llvm::GlobalVariable>(lhs->getOperand(0))) {
-              auto ptr_sym =
-                  global_sym(llvm::cast<llvm::GlobalValue>(lhs->getOperand(0)));
-
-              relocs.push_back({off,
-                                static_cast<int32_t>(off),
-                                ptr_sym,
-                                RelocInfo::RELOC_PC32});
-              return true;
+        if (auto *sub = llvm::dyn_cast<llvm::SubOperator>(expr->getOperand(0));
+            sub && sub->getType()->isIntegerTy(64)) {
+          auto *lhs =
+              llvm::dyn_cast<llvm::PtrToIntOperator>(sub->getOperand(0));
+          auto *rhs =
+              llvm::dyn_cast<llvm::PtrToIntOperator>(sub->getOperand(1));
+          if (lhs && rhs) {
+            if (rhs->getOperand(0) != reloc_base) {
+              return false; // Can't handle generic pointer subtraction.
             }
+
+            llvm::Value *val = lhs->getOperand(0);
+            u64 ptr_delta = i32(off);
+            if (auto *gep = llvm::dyn_cast<llvm::GEPOperator>(val)) {
+              // Only handle canonical ptradd.
+              auto *idx = llvm::dyn_cast<llvm::ConstantInt>(gep->getOperand(1));
+              if (!gep->getSourceElementType()->isIntegerTy(8) || !idx ||
+                  idx->getType()->getIntegerBitWidth() > 64) {
+                return false;
+              }
+              val = gep->getOperand(0);
+              ptr_delta += idx->getSExtValue();
+            }
+            if (!llvm::isa<llvm::GlobalVariable>(val)) {
+              return false;
+            }
+            relocs.push_back({off,
+                              static_cast<int32_t>(ptr_delta),
+                              global_sym(llvm::cast<llvm::GlobalVariable>(val)),
+                              RelocInfo::RELOC_PC32});
+            return true;
           }
         }
       }
@@ -1194,8 +1251,12 @@ typename LLVMCompilerBase<Adaptor, Derived, Config>::SymRef
   case LibFunc::ceil: name = "ceil"; break;
   case LibFunc::roundf: name = "roundf"; break;
   case LibFunc::round: name = "round"; break;
+  case LibFunc::nearbyintf: name = "nearbyintf"; break;
+  case LibFunc::nearbyint: name = "nearbyint"; break;
   case LibFunc::rintf: name = "rintf"; break;
   case LibFunc::rint: name = "rint"; break;
+  case LibFunc::lround: name = "lround"; break;
+  case LibFunc::lroundf: name = "lroundf"; break;
   case LibFunc::memcpy: name = "memcpy"; break;
   case LibFunc::memset: name = "memset"; break;
   case LibFunc::memmove: name = "memmove"; break;
@@ -1204,14 +1265,34 @@ typename LLVMCompilerBase<Adaptor, Derived, Config>::SymRef
   case LibFunc::powidf2: name = "__powidf2"; break;
   case LibFunc::trunc: name = "trunc"; break;
   case LibFunc::truncf: name = "truncf"; break;
+  case LibFunc::fma: name = "fma"; break;
+  case LibFunc::fmaf: name = "fmaf"; break;
   case LibFunc::pow: name = "pow"; break;
   case LibFunc::powf: name = "powf"; break;
   case LibFunc::sin: name = "sin"; break;
   case LibFunc::sinf: name = "sinf"; break;
   case LibFunc::cos: name = "cos"; break;
   case LibFunc::cosf: name = "cosf"; break;
+  case LibFunc::tan: name = "tan"; break;
+  case LibFunc::tanf: name = "tanf"; break;
+  case LibFunc::asin: name = "asin"; break;
+  case LibFunc::asinf: name = "asinf"; break;
+  case LibFunc::acos: name = "acos"; break;
+  case LibFunc::acosf: name = "acosf"; break;
+  case LibFunc::atan: name = "atan"; break;
+  case LibFunc::atanf: name = "atanf"; break;
+  case LibFunc::atan2: name = "atan2"; break;
+  case LibFunc::atan2f: name = "atan2f"; break;
+  case LibFunc::sinh: name = "sinh"; break;
+  case LibFunc::sinhf: name = "sinhf"; break;
+  case LibFunc::cosh: name = "cosh"; break;
+  case LibFunc::coshf: name = "coshf"; break;
+  case LibFunc::tanh: name = "tanh"; break;
+  case LibFunc::tanhf: name = "tanhf"; break;
   case LibFunc::log: name = "log"; break;
   case LibFunc::logf: name = "logf"; break;
+  case LibFunc::logl: name = "logl"; break;
+  case LibFunc::logf128: name = "logf128"; break;
   case LibFunc::log2: name = "log2"; break;
   case LibFunc::log2f: name = "log2f"; break;
   case LibFunc::log10: name = "log10"; break;
@@ -1220,6 +1301,10 @@ typename LLVMCompilerBase<Adaptor, Derived, Config>::SymRef
   case LibFunc::expf: name = "expf"; break;
   case LibFunc::exp2: name = "exp2"; break;
   case LibFunc::exp2f: name = "exp2f"; break;
+  case LibFunc::modf: name = "modf"; break;
+  case LibFunc::modff: name = "modff"; break;
+  case LibFunc::frexp: name = "frexp"; break;
+  case LibFunc::frexpf: name = "frexpf"; break;
   case LibFunc::trunctfsf2: name = "__trunctfsf2"; break;
   case LibFunc::trunctfdf2: name = "__trunctfdf2"; break;
   case LibFunc::extendsftf2: name = "__extendsftf2"; break;
@@ -1305,7 +1390,12 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_inst(
 
     // Terminators
     res[llvm::Instruction::Ret] = {&Derived::compile_ret, 0};
+#if LLVM_VERSION_MAJOR >= 23
+    res[llvm::Instruction::UncondBr] = {&Derived::compile_br, 0};
+    res[llvm::Instruction::CondBr] = {&Derived::compile_cond_br, 0};
+#else
     res[llvm::Instruction::Br] = {&Derived::compile_br, 0};
+#endif
     res[llvm::Instruction::Switch] = {&Derived::compile_switch, 0};
     // TODO: IndirectBr
     res[llvm::Instruction::Invoke] = {&Derived::compile_invoke, 0};
@@ -1355,6 +1445,9 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_inst(
     res[llvm::Instruction::FPTrunc] = {&Derived::compile_float_ext_trunc, 0};
     res[llvm::Instruction::FPExt] = {&Derived::compile_float_ext_trunc, 0};
     res[llvm::Instruction::PtrToInt] = {&Derived::compile_ptr_to_int, 0};
+#if LLVM_VERSION_MAJOR >= 22
+    res[llvm::Instruction::PtrToAddr] = {&Derived::compile_ptr_to_int, 0};
+#endif
     res[llvm::Instruction::IntToPtr] = {&Derived::compile_int_to_ptr, 0};
     res[llvm::Instruction::BitCast] = {&Derived::compile_bitcast, 0};
     // TODO: AddrSpaceCast
@@ -1392,6 +1485,22 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_unreachable(
 }
 
 template <typename Adaptor, typename Derived, typename Config>
+bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_br(
+    const llvm::Instruction *inst, [[maybe_unused]] const ValInfo &info, u64) {
+#if LLVM_VERSION_MAJOR >= 23
+  const auto *br = llvm::cast<llvm::UncondBrInst>(inst);
+#else
+  const auto *br = llvm::cast<llvm::BranchInst>(inst);
+  if (br->isConditional()) {
+    return derived()->compile_cond_br(inst, info, 0);
+  }
+#endif
+  derived()->generate_uncond_branch(
+      this->adaptor->block_lookup_idx(br->getSuccessor(0)));
+  return true;
+}
+
+template <typename Adaptor, typename Derived, typename Config>
 bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_ret(
     const llvm::Instruction *inst, const ValInfo &, u64) {
   typename Derived::RetBuilder rb{*derived(), *derived()->cur_cc_assigner()};
@@ -1401,15 +1510,20 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_ret(
     llvm::Type *ret_ty = retval->getType();
     if (ret_ty->isIntegerTy()) {
       if (unsigned width = ret_ty->getIntegerBitWidth(); width % 32 != 0) {
-        assert(width < 64 && "non-i128 multi-word int should be illegal");
         unsigned dst_width = width < 32 ? 32 : 64;
         llvm::AttributeList attrs = this->adaptor->cur_func->getAttributes();
         llvm::AttributeSet ret_attrs = attrs.getRetAttrs();
         if (ret_attrs.hasAttribute(llvm::Attribute::ZExt)) {
+          if (width > 64) {
+            return false;
+          }
           auto [vr, vpr] = this->val_ref_single(retval);
           rb.add(std::move(vpr).into_extended(false, width, dst_width), {});
           handled = true;
         } else if (ret_attrs.hasAttribute(llvm::Attribute::SExt)) {
+          if (width > 64) {
+            return false;
+          }
           auto [vr, vpr] = this->val_ref_single(retval);
           rb.add(std::move(vpr).into_extended(true, width, dst_width), {});
           handled = true;
@@ -1500,6 +1614,23 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_load_generic(
     return true;
   }
 
+  using EncodeFnTy = bool (Derived::*)(GenericValuePart &&, ValuePart &&);
+  static constexpr auto int_fns = []() consteval {
+    std::array<EncodeFnTy[2], 8> res{};
+    res[0][0] = &Derived::encode_loadi8_zext;
+    res[0][1] = &Derived::encode_loadi8_sext;
+    res[1][0] = &Derived::encode_loadi16_zext;
+    res[1][1] = &Derived::encode_loadi16_sext;
+    res[2][0] = &Derived::encode_loadi24;
+    res[3][0] = &Derived::encode_loadi32_zext;
+    res[3][1] = &Derived::encode_loadi32_sext;
+    res[4][0] = &Derived::encode_loadi40;
+    res[5][0] = &Derived::encode_loadi48;
+    res[6][0] = &Derived::encode_loadi56;
+    res[7][0] = &Derived::encode_loadi64;
+    return res;
+  }();
+
   unsigned num_bits;
   bool sext = false;
   const llvm::Instruction *target = load;
@@ -1535,23 +1666,7 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_load_generic(
     }
 
   load_single_integer:
-    using EncodeFnTy = bool (Derived::*)(GenericValuePart &&, ValuePart &&);
-    static constexpr auto fns = []() consteval {
-      std::array<EncodeFnTy[2], 8> res{};
-      res[0][0] = &Derived::encode_loadi8_zext;
-      res[0][1] = &Derived::encode_loadi8_sext;
-      res[1][0] = &Derived::encode_loadi16_zext;
-      res[1][1] = &Derived::encode_loadi16_sext;
-      res[2][0] = &Derived::encode_loadi24;
-      res[3][0] = &Derived::encode_loadi32_zext;
-      res[3][1] = &Derived::encode_loadi32_sext;
-      res[4][0] = &Derived::encode_loadi40;
-      res[5][0] = &Derived::encode_loadi48;
-      res[6][0] = &Derived::encode_loadi56;
-      res[7][0] = &Derived::encode_loadi64;
-      return res;
-    }();
-    EncodeFnTy fn = fns[(num_bits - 1) / 8][sext];
+    EncodeFnTy fn = int_fns[(num_bits - 1) / 8][sext];
     (derived()->*fn)(std::move(ptr_op), this->result_ref(target).part(0));
     break;
   }
@@ -1567,8 +1682,18 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_load_generic(
   case ptr: num_bits = 64; goto load_single_integer;
 
   case i128: {
+    num_bits = load->getType()->getIntegerBitWidth();
     ValueRef res = this->result_ref(load);
-    derived()->encode_loadi128(std::move(ptr_op), res.part(0), res.part(1));
+    if (num_bits == 128) {
+      derived()->encode_loadi128(std::move(ptr_op), res.part(0), res.part(1));
+      break;
+    }
+    EncodeFnTy fn0 = int_fns[7][0]; // i64
+    EncodeFnTy fn1 = int_fns[(num_bits - 64 - 1) / 8][0];
+    // TODO: fuse expr; not easy, because we lose the GVP
+    AsmReg ptr = this->gval_as_reg(ptr_op);
+    (derived()->*fn0)(typename GenericValuePart::Expr{ptr, 0}, res.part(0));
+    (derived()->*fn1)(typename GenericValuePart::Expr{ptr, 8}, res.part(1));
     break;
   }
   case f32:
@@ -1753,6 +1878,21 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_store_generic(
   // TODO: don't recompute this, this is currently computed for every val part
   auto [ty, ty_idx] = this->adaptor->lower_type(op_val->getType());
 
+  using EncodeFnTy =
+      bool (Derived::*)(GenericValuePart &&, GenericValuePart &&);
+  static constexpr auto int_fns = []() consteval {
+    std::array<EncodeFnTy, 8> res{};
+    res[0] = &Derived::encode_storei8;
+    res[1] = &Derived::encode_storei16;
+    res[2] = &Derived::encode_storei24;
+    res[3] = &Derived::encode_storei32;
+    res[4] = &Derived::encode_storei40;
+    res[5] = &Derived::encode_storei48;
+    res[6] = &Derived::encode_storei56;
+    res[7] = &Derived::encode_storei64;
+    return res;
+  }();
+
   unsigned num_bits;
   switch (ty) {
     using enum LLVMBasicValType;
@@ -1764,32 +1904,9 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_store_generic(
     assert(op_val->getType()->isIntegerTy());
     num_bits = op_val->getType()->getIntegerBitWidth();
   store_single_integer:
-    switch (tpde::util::align_up(num_bits, 8)) {
-    case 1:
-    case 8: derived()->encode_storei8(std::move(ptr_op), op_ref.part(0)); break;
-    case 16:
-      derived()->encode_storei16(std::move(ptr_op), op_ref.part(0));
-      break;
-    case 24:
-      derived()->encode_storei24(std::move(ptr_op), op_ref.part(0));
-      break;
-    case 32:
-      derived()->encode_storei32(std::move(ptr_op), op_ref.part(0));
-      break;
-    case 40:
-      derived()->encode_storei40(std::move(ptr_op), op_ref.part(0));
-      break;
-    case 48:
-      derived()->encode_storei48(std::move(ptr_op), op_ref.part(0));
-      break;
-    case 56:
-      derived()->encode_storei56(std::move(ptr_op), op_ref.part(0));
-      break;
-    case 64:
-      derived()->encode_storei64(std::move(ptr_op), op_ref.part(0));
-      break;
-    default: return false;
-    }
+    // TODO: zero-extend if num_bits is not a multiple of 8.
+    EncodeFnTy fn = int_fns[(num_bits - 1) / 8];
+    (derived()->*fn)(std::move(ptr_op), op_ref.part(0));
     break;
   }
   case v8i1:
@@ -1804,10 +1921,22 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_store_generic(
   case ptr:
     derived()->encode_storei64(std::move(ptr_op), op_ref.part(0));
     break;
-  case i128:
-    derived()->encode_storei128(
-        std::move(ptr_op), op_ref.part(0), op_ref.part(1));
+  case i128: {
+    num_bits = op_val->getType()->getIntegerBitWidth();
+    if (num_bits == 128) {
+      derived()->encode_storei128(
+          std::move(ptr_op), op_ref.part(0), op_ref.part(1));
+      break;
+    }
+    // TODO: zero-extend if num_bits is not a multiple of 8.
+    EncodeFnTy fn0 = int_fns[7]; // i64
+    EncodeFnTy fn1 = int_fns[(num_bits - 64 - 1) / 8];
+    // TODO: fuse expr; not easy, because we lose the GVP
+    AsmReg ptr = this->gval_as_reg(ptr_op);
+    (derived()->*fn0)(typename GenericValuePart::Expr{ptr, 0}, op_ref.part(0));
+    (derived()->*fn1)(typename GenericValuePart::Expr{ptr, 8}, op_ref.part(1));
     break;
+  }
   case f32:
     derived()->encode_storef32(std::move(ptr_op), op_ref.part(0));
     break;
@@ -1929,8 +2058,8 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_store(
 template <typename Adaptor, typename Derived, typename Config>
 bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_int_binary_op_i128(
     const llvm::Instruction *inst, const ValInfo &, IntBinaryOp op) {
-  assert(inst->getType()->getIntegerBitWidth() == 128 &&
-         "non-i128 multi-word integer should not be legal");
+  unsigned int_width = inst->getType()->getIntegerBitWidth();
+  assert(int_width > 64 && int_width <= 128);
   llvm::Value *lhs_op = inst->getOperand(0);
   llvm::Value *rhs_op = inst->getOperand(1);
 
@@ -1942,6 +2071,10 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_int_binary_op_i128(
       lf = op.is_signed() ? LibFunc::divti3 : LibFunc::udivti3;
     } else {
       lf = op.is_signed() ? LibFunc::modti3 : LibFunc::umodti3;
+    }
+
+    if (int_width != 128) {
+      return false; // TODO: extend parameters
     }
 
     std::array<IRValueRef, 2> args{lhs_op, rhs_op};
@@ -1960,6 +2093,12 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_int_binary_op_i128(
   }
 
   if (op.is_shift()) {
+    ValuePartRef lhs_hi = lhs.part(1);
+    if (int_width != 128 && op.needs_lhs_ext()) {
+      bool sext = op.is_signed(); // Essentially just ashr.
+      lhs_hi = std::move(lhs_hi).into_extended(sext, int_width - 64, 64);
+    }
+
     ValuePartRef shift_amt = rhs.part(0);
     if (shift_amt.is_const()) {
       u64 imm1 = shift_amt.const_data()[0] & 0b111'1111; // amt
@@ -1968,7 +2107,7 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_int_binary_op_i128(
         if (op == IntBinaryOp::shl) {
           derived()->encode_shli128_lt64(
               lhs.part(0),
-              lhs.part(1),
+              std::move(lhs_hi),
               ValuePartRef(this, imm1, 1, Config::GP_BANK),
               ValuePartRef(this, imm2, 1, Config::GP_BANK),
               res.part(0),
@@ -1976,7 +2115,7 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_int_binary_op_i128(
         } else if (op == IntBinaryOp::shr) {
           derived()->encode_shri128_lt64(
               lhs.part(0),
-              lhs.part(1),
+              std::move(lhs_hi),
               ValuePartRef(this, imm1, 1, Config::GP_BANK),
               ValuePartRef(this, imm2, 1, Config::GP_BANK),
               res.part(0),
@@ -1985,11 +2124,26 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_int_binary_op_i128(
           assert(op == IntBinaryOp::ashr);
           derived()->encode_ashri128_lt64(
               lhs.part(0),
-              lhs.part(1),
+              std::move(lhs_hi),
               ValuePartRef(this, imm1, 1, Config::GP_BANK),
               ValuePartRef(this, imm2, 1, Config::GP_BANK),
               res.part(0),
               res.part(1));
+        }
+      } else if (imm1 == 64) {
+        // For shifts by 64, we just need to move one part to another.
+        if (op == IntBinaryOp::shl) {
+          res.part(0).set_value(ValuePartRef(this, 0, 8, Config::GP_BANK));
+          res.part(1).set_value(lhs.part(0));
+        } else if (op == IntBinaryOp::shr) {
+          res.part(0).set_value(std::move(lhs_hi));
+          res.part(1).set_value(ValuePartRef(this, 0, 8, Config::GP_BANK));
+        } else {
+          assert(op == IntBinaryOp::ashr);
+          (void)lhs_hi.cur_reg_or_load(); // Force into reg for get_unowned_ref.
+          derived()->encode_fill_with_sign64(lhs_hi.get_unowned_ref(),
+                                             res.part(1));
+          res.part(0).set_value(std::move(lhs_hi));
         }
       } else {
         imm1 -= 64;
@@ -2001,14 +2155,14 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_int_binary_op_i128(
               res.part(1));
         } else if (op == IntBinaryOp::shr) {
           derived()->encode_shri128_ge64(
-              lhs.part(1),
+              std::move(lhs_hi),
               ValuePartRef(this, imm1, 1, Config::GP_BANK),
               res.part(0),
               res.part(1));
         } else {
           assert(op == IntBinaryOp::ashr);
           derived()->encode_ashri128_ge64(
-              lhs.part(1),
+              std::move(lhs_hi),
               ValuePartRef(this, imm1, 1, Config::GP_BANK),
               res.part(0),
               res.part(1));
@@ -2017,20 +2171,20 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_int_binary_op_i128(
     } else {
       if (op == IntBinaryOp::shl) {
         derived()->encode_shli128(lhs.part(0),
-                                  lhs.part(1),
+                                  std::move(lhs_hi),
                                   std::move(shift_amt),
                                   res.part(0),
                                   res.part(1));
       } else if (op == IntBinaryOp::shr) {
         derived()->encode_shri128(lhs.part(0),
-                                  lhs.part(1),
+                                  std::move(lhs_hi),
                                   std::move(shift_amt),
                                   res.part(0),
                                   res.part(1));
       } else {
         assert(op == IntBinaryOp::ashr);
         derived()->encode_ashri128(lhs.part(0),
-                                   lhs.part(1),
+                                   std::move(lhs_hi),
                                    std::move(shift_amt),
                                    res.part(0),
                                    res.part(1));
@@ -2656,6 +2810,10 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_int_trunc(
     // contains the lowest bits.
     res_vr.part(0).set_value(src_vr.part(0));
     return true;
+  case i128:
+    res_vr.part(0).set_value(src_vr.part(0));
+    res_vr.part(1).set_value(src_vr.part(1));
+    return true;
   case v8i1:
   case v16i1:
   case v32i1:
@@ -2728,35 +2886,42 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_int_ext(
 
   unsigned src_width = src_val->getType()->getIntegerBitWidth();
   unsigned dst_width = inst->getType()->getIntegerBitWidth();
-  assert(dst_width >= src_width);
+  assert(dst_width > src_width);
 
   auto src_ref = this->val_ref(src_val);
-
-  ValuePartRef low = src_ref.part(0);
-  if (src_width < 64) {
-    unsigned ext_width = dst_width <= 64 ? dst_width : 64;
-    low = std::move(low).into_extended(sign, src_width, ext_width);
-  } else if (src_width > 64) {
-    return false;
-  }
-
   auto res = this->result_ref(inst);
 
-  if (dst_width == 128) {
-    auto res_ref_high = res.part(1);
-
-    if (sign) {
-      if (!low.has_reg()) {
-        low.load_to_reg();
-      }
-      derived()->encode_fill_with_sign64(low.get_unowned_ref(), res_ref_high);
-    } else {
-      res_ref_high.set_value(ValuePart{u64{0}, 8, res_ref_high.bank()});
+  if (src_width <= 64) {
+    ValuePartRef low = src_ref.part(0);
+    if (src_width < 64) {
+      unsigned ext_width = dst_width <= 64 ? dst_width : 64;
+      low = std::move(low).into_extended(sign, src_width, ext_width);
     }
+    if (dst_width > 64) {
+      auto res_ref_high = res.part(1);
+
+      if (sign) {
+        if (!low.has_reg()) {
+          low.load_to_reg();
+        }
+        derived()->encode_fill_with_sign64(low.get_unowned_ref(), res_ref_high);
+      } else {
+        res_ref_high.set_value(ValuePart{u64{0}, 8, res_ref_high.bank()});
+      }
+    }
+
+    res.part(0).set_value(std::move(low));
+    return true;
   }
 
-  res.part(0).set_value(std::move(low));
-  return true;
+  if (src_width < 128 && dst_width <= 128) {
+    res.part(0).set_value(src_ref.part(0));
+    res.part(1).set_value(
+        src_ref.part(1).into_extended(sign, src_width - 64, 64));
+    return true;
+  }
+
+  return false;
 }
 
 template <typename Adaptor, typename Derived, typename Config>
@@ -3102,7 +3267,7 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_extract_element(
     assert(this->adaptor->val_parts(src).count() == 1);
     // index 0 extract occurs so often that is it worth to have a special case.
     if (auto *ci = llvm::dyn_cast<llvm::ConstantInt>(index);
-        ci && ci->isZeroValue()) {
+        ci && ci->isZero()) {
       result.set_value(vec_vr.part(0));
     } else {
       derived()->encode_shri64(
@@ -3795,19 +3960,10 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_freeze(
 }
 
 template <typename Adaptor, typename Derived, typename Config>
-bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_call(
-    const llvm::Instruction *inst, const ValInfo &info, u64) {
-  const auto *call = llvm::cast<llvm::CallBase>(inst);
-  if (auto *intrin = llvm::dyn_cast<llvm::IntrinsicInst>(call)) {
-    return compile_intrin(intrin, info);
-  }
-
+bool LLVMCompilerBase<Adaptor, Derived, Config>::handle_call(
+    const llvm::CallBase *call, const ValInfo &, SymRef override_sym) {
   if (call->isMustTailCall() || call->hasOperandBundles()) {
     return false;
-  }
-
-  if (call->isInlineAsm()) {
-    return derived()->compile_inline_asm(call);
   }
 
   auto cb = derived()->create_call_builder(call);
@@ -3858,7 +4014,13 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_call(
         arg.ext_bits = op->getType()->getIntegerBitWidth();
       }
       break;
-    case LLVMBasicValType::i128: arg.byval_align = 16; break;
+    case LLVMBasicValType::i128:
+      arg.byval_align = 16;
+      if (call->paramHasAttr(i, llvm::Attribute::AttrKind::ZExt) ||
+          call->paramHasAttr(i, llvm::Attribute::AttrKind::SExt)) {
+        return false;
+      }
+      break;
     case LLVMBasicValType::f80: {
       auto [vr, vpr] = this->val_ref_single(op);
       tpde::CCAssignment cca{
@@ -3880,12 +4042,16 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_call(
     cb->add_arg(arg, this->adaptor->type_part_count(ty, ty_idx));
   }
 
-  llvm::Value *target = call->getCalledOperand();
-  if (auto *global = llvm::dyn_cast<llvm::GlobalValue>(target)) {
-    cb->call(global_sym(global));
+  if (override_sym.valid()) {
+    cb->call(override_sym);
   } else {
-    auto [_, tgt_vp] = this->val_ref_single(target);
-    cb->call(std::move(tgt_vp));
+    llvm::Value *target = call->getCalledOperand();
+    if (auto *global = llvm::dyn_cast<llvm::GlobalValue>(target)) {
+      cb->call(global_sym(global));
+    } else {
+      auto [_, tgt_vp] = this->val_ref_single(target);
+      cb->call(std::move(tgt_vp));
+    }
   }
 
   if (!call->getType()->isVoidTy()) {
@@ -3903,6 +4069,19 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_call(
   }
 
   return true;
+}
+
+template <typename Adaptor, typename Derived, typename Config>
+bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_call(
+    const llvm::Instruction *inst, const ValInfo &info, u64) {
+  const auto *call = llvm::cast<llvm::CallBase>(inst);
+  if (auto *intrin = llvm::dyn_cast<llvm::IntrinsicInst>(call)) {
+    return compile_intrin(intrin, info);
+  } else if (call->isInlineAsm()) {
+    return derived()->compile_inline_asm(call);
+  } else {
+    return derived()->handle_call(call, info);
+  }
 }
 
 template <typename Adaptor, typename Derived, typename Config>
@@ -4103,29 +4282,30 @@ template <typename Adaptor, typename Derived, typename Config>
 bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_alloca(
     const llvm::Instruction *inst, const ValInfo &, u64) {
   const auto *alloca = llvm::cast<llvm::AllocaInst>(inst);
-
-  auto [res_vr, res_ref] = this->result_ref_single(alloca);
-
   auto align = alloca->getAlign().value();
   auto &layout = this->adaptor->mod->getDataLayout();
-  if (auto size = alloca->getAllocationSize(layout)) {
-    if (size->isScalable()) {
-      return false;
-    }
-    derived()->alloca_fixed(size->getFixedValue(), align, res_ref);
-    return true;
+  auto elem_size = layout.getTypeAllocSize(alloca->getAllocatedType());
+  if (elem_size.isScalable()) {
+    return false;
   }
 
   const llvm::Value *size_val = alloca->getArraySize();
-  auto [size_vr, size_ref] = this->val_ref_single(size_val);
+  unsigned size_width = size_val->getType()->getIntegerBitWidth();
+  if (size_width > 64) {
+    return false; // Don't support alloca array sizes beyond i64...
+  }
 
-  auto elem_size = layout.getTypeAllocSize(alloca->getAllocatedType());
-  if (auto width = size_val->getType()->getIntegerBitWidth(); width != 64) {
-    if (width > 64) {
-      // Don't support alloca array sizes beyond i64...
-      return false;
-    }
-    size_ref = std::move(size_ref).into_extended(false, width, 64);
+  auto [res_vr, res_ref] = this->result_ref_single(alloca);
+  if (auto *ci = llvm::dyn_cast<llvm::ConstantInt>(size_val)) {
+    // TODO: should we care about overflow here?
+    uint64_t size_bytes = elem_size.getFixedValue() * ci->getZExtValue();
+    derived()->alloca_fixed(size_bytes, align, res_ref);
+    return true;
+  }
+
+  auto [size_vr, size_ref] = this->val_ref_single(size_val);
+  if (size_width != 64) {
+    size_ref = std::move(size_ref).into_extended(false, size_width, 64);
   }
   derived()->alloca_dynamic(elem_size, std::move(size_ref), align, res_ref);
   return true;
@@ -4771,18 +4951,39 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_intrin(
   case llvm::Intrinsic::floor:
   case llvm::Intrinsic::ceil:
   case llvm::Intrinsic::round:
+  case llvm::Intrinsic::nearbyint:
   case llvm::Intrinsic::rint:
   case llvm::Intrinsic::trunc:
+  case llvm::Intrinsic::fma:
   case llvm::Intrinsic::pow:
   case llvm::Intrinsic::powi:
   case llvm::Intrinsic::sin:
   case llvm::Intrinsic::cos:
+  case llvm::Intrinsic::tan:
+  case llvm::Intrinsic::asin:
+  case llvm::Intrinsic::acos:
+  case llvm::Intrinsic::atan:
+#if LLVM_VERSION_MAJOR >= 20
+  case llvm::Intrinsic::atan2:
+#endif
+  case llvm::Intrinsic::sinh:
+  case llvm::Intrinsic::cosh:
+  case llvm::Intrinsic::tanh:
   case llvm::Intrinsic::log:
   case llvm::Intrinsic::log10:
   case llvm::Intrinsic::log2:
   case llvm::Intrinsic::exp:
   case llvm::Intrinsic::exp2: {
     // Floating-point intrinsics that can be mapped directly to libcalls.
+    if (intrin_id == llvm::Intrinsic::log) {
+      if (inst->getType()->isX86_FP80Ty()) {
+        return derived()->handle_call(
+            inst, info, get_libfunc_sym(LibFunc::logl));
+      } else if (inst->getType()->isFP128Ty()) {
+        return derived()->handle_call(
+            inst, info, get_libfunc_sym(LibFunc::logf128));
+      }
+    }
     const auto is_double = inst->getType()->isDoubleTy();
     if (!is_double && !inst->getType()->isFloatTy()) {
       return false;
@@ -4794,12 +4995,26 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_intrin(
     case floor: func = is_double ? LibFunc::floor : LibFunc::floorf; break;
     case ceil: func = is_double ? LibFunc::ceil : LibFunc::ceilf; break;
     case round: func = is_double ? LibFunc::round : LibFunc::roundf; break;
+    case nearbyint:
+      func = is_double ? LibFunc::nearbyint : LibFunc::nearbyintf;
+      break;
     case rint: func = is_double ? LibFunc::rint : LibFunc::rintf; break;
     case trunc: func = is_double ? LibFunc::trunc : LibFunc::truncf; break;
+    case fma: func = is_double ? LibFunc::fma : LibFunc::fmaf; break;
     case pow: func = is_double ? LibFunc::pow : LibFunc::powf; break;
     case powi: func = is_double ? LibFunc::powidf2 : LibFunc::powisf2; break;
     case sin: func = is_double ? LibFunc::sin : LibFunc::sinf; break;
     case cos: func = is_double ? LibFunc::cos : LibFunc::cosf; break;
+    case tan: func = is_double ? LibFunc::tan : LibFunc::tanf; break;
+    case asin: func = is_double ? LibFunc::asin : LibFunc::asinf; break;
+    case acos: func = is_double ? LibFunc::acos : LibFunc::acosf; break;
+    case atan: func = is_double ? LibFunc::atan : LibFunc::atanf; break;
+#if LLVM_VERSION_MAJOR >= 20
+    case atan2: func = is_double ? LibFunc::atan2 : LibFunc::atan2f; break;
+#endif
+    case sinh: func = is_double ? LibFunc::sinh : LibFunc::sinhf; break;
+    case cosh: func = is_double ? LibFunc::cosh : LibFunc::coshf; break;
+    case tanh: func = is_double ? LibFunc::tanh : LibFunc::tanhf; break;
     case log: func = is_double ? LibFunc::log : LibFunc::logf; break;
     case log2: func = is_double ? LibFunc::log2 : LibFunc::log2f; break;
     case log10: func = is_double ? LibFunc::log10 : LibFunc::log10f; break;
@@ -4808,35 +5023,84 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_intrin(
     default: TPDE_UNREACHABLE("invalid library fp intrinsic");
     }
 
-    llvm::SmallVector<IRValueRef, 2> ops;
-    for (auto &op : inst->args()) {
-      ops.push_back(op);
+    return derived()->handle_call(inst, info, get_libfunc_sym(func));
+  }
+  case llvm::Intrinsic::lround: {
+    const llvm::Value *arg = inst->getArgOperand(0);
+    const auto is_double = arg->getType()->isDoubleTy();
+    if (!is_double && !arg->getType()->isFloatTy()) {
+      return false;
     }
-    auto res_vr = this->result_ref(inst);
-    derived()->create_helper_call(ops, &res_vr, get_libfunc_sym(func));
+    if (!inst->getType()->isIntegerTy() ||
+        inst->getType()->getIntegerBitWidth() > 64) {
+      return false;
+    }
+
+    LibFunc func = is_double ? LibFunc::lround : LibFunc::lroundf;
+    return derived()->handle_call(inst, info, get_libfunc_sym(func));
+  }
+#if LLVM_VERSION_MAJOR >= 21
+  case llvm::Intrinsic::modf:
+#endif
+  case llvm::Intrinsic::frexp: {
+    llvm::Value *arg = inst->getArgOperand(0);
+    const auto is_double = arg->getType()->isDoubleTy();
+    if (!is_double && !arg->getType()->isFloatTy()) {
+      return false;
+    }
+
+    LibFunc func;
+    switch (intrin_id) {
+      using enum llvm::Intrinsic::IndependentIntrinsics;
+#if LLVM_VERSION_MAJOR >= 21
+    case modf: func = is_double ? LibFunc::modf : LibFunc::modff; break;
+#endif
+    case frexp: func = is_double ? LibFunc::frexp : LibFunc::frexpf; break;
+    default: TPDE_UNREACHABLE("invalid library fp intrinsic");
+    }
+
+    auto cb = derived()->create_call_builder(inst);
+    if (!cb) {
+      return false;
+    }
+
+    // This is tricky. The LLVM intrinsic returns two values as struct. The C
+    // function, however, returns a single value in a register and the second
+    // value via an output parameter to an address. We have to allocate a stack
+    // slot (we reuse the spill slot of the result) and pass the address of this
+    // stack slot as parameter.
+    cb->add_arg(typename Derived::CallArg{arg});
+
+    ValueRef res = this->result_ref(inst);
+    assert(res.assignment()->part_count == 2);
+    tpde::AssignmentPartRef int_part{res.assignment(), 1};
+    this->allocate_spill_slot(int_part);
+    int_part.set_stack_valid();
+
+    // Compute address and store this into a ValuePart.
+    // TODO: this is rather ugly, is there a better way?
+    GenericValuePart int_part_slot = derived()->val_spill_slot(int_part);
+    (void)derived()->gval_expr_as_reg(int_part_slot);
+    ValuePart int_part_slot_vp;
+    int_part_slot_vp.set_value(
+        derived(), std::move(std::get<ScratchReg>(int_part_slot.state)));
+    cb->add_arg(std::move(int_part_slot_vp),
+                tpde::CCAssignment{.bank = Config::GP_BANK, .size = 8});
+
+    cb->call(get_libfunc_sym(func));
+    cb->add_ret(res.part(0), {});
     return true;
   }
   case llvm::Intrinsic::minnum:
   case llvm::Intrinsic::maxnum:
   case llvm::Intrinsic::copysign: {
     // Floating-point intrinsics with two operands
-    const auto is_double = inst->getType()->isDoubleTy();
-    if (!is_double && !inst->getType()->isFloatTy()) {
-      return false;
-    }
-
     using EncodeFnTy = bool (Derived::*)(
         GenericValuePart &&, GenericValuePart &&, ValuePart &&);
     EncodeFnTy fn;
-    if (is_double) {
-      switch (intrin_id) {
-        using enum llvm::Intrinsic::IndependentIntrinsics;
-      case minnum: fn = &Derived::encode_minnumf64; break;
-      case maxnum: fn = &Derived::encode_maxnumf64; break;
-      case copysign: fn = &Derived::encode_copysignf64; break;
-      default: TPDE_UNREACHABLE("invalid binary fp intrinsic");
-      }
-    } else {
+    switch (info.type) {
+      using enum LLVMBasicValType;
+    case f32:
       switch (intrin_id) {
         using enum llvm::Intrinsic::IndependentIntrinsics;
       case minnum: fn = &Derived::encode_minnumf32; break;
@@ -4844,6 +5108,24 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_intrin(
       case copysign: fn = &Derived::encode_copysignf32; break;
       default: TPDE_UNREACHABLE("invalid binary fp intrinsic");
       }
+      break;
+    case f64:
+      switch (intrin_id) {
+        using enum llvm::Intrinsic::IndependentIntrinsics;
+      case minnum: fn = &Derived::encode_minnumf64; break;
+      case maxnum: fn = &Derived::encode_maxnumf64; break;
+      case copysign: fn = &Derived::encode_copysignf64; break;
+      default: TPDE_UNREACHABLE("invalid binary fp intrinsic");
+      }
+      break;
+    case f128:
+      switch (intrin_id) {
+        using enum llvm::Intrinsic::IndependentIntrinsics;
+      case copysign: fn = &Derived::encode_copysignf128; break;
+      default: return false;
+      }
+      break;
+    default: return false;
     }
 
     auto lhs = this->val_ref(inst->getOperand(0));
@@ -4862,6 +5144,12 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_intrin(
       derived()->encode_fabsf32(this->val_ref(val).part(0), res_ref);
     } else if (ty->isFP128Ty()) {
       derived()->encode_fabsf128(this->val_ref(val).part(0), res_ref);
+    } else if (ty->isX86_FP80Ty()) {
+      if constexpr (requires { &Derived::fp80_abs; }) {
+        derived()->fp80_abs(this->val_ref(val).part(0), std::move(res_ref));
+        return true;
+      }
+      return false;
     } else {
       return false;
     }
@@ -5460,6 +5748,8 @@ bool LLVMCompilerBase<Adaptor, Derived, Config>::compile_intrin(
     ValueRef res = this->result_ref(inst);
     return derived()->encode_readcyclecounter(res.part(0));
   }
+  case llvm::Intrinsic::get_rounding:
+    return derived()->encode_getrounding(this->result_ref(inst).part(0));
   default: {
     return derived()->handle_intrin(inst);
   }

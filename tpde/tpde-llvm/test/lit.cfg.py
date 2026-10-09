@@ -8,7 +8,7 @@ import lit.formats
 from lit.llvm import llvm_config
 
 config.name = 'TPDE-LLVM'
-config.test_format = lit.formats.ShTest(True)
+config.test_format = lit.formats.ShTest()
 
 config.suffixes = ['.ll', '.cpp', '.test']
 

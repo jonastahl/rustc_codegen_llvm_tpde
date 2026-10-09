@@ -193,6 +193,85 @@ entry:
     ret void
 }
 
+define void @and_i80_3(i80 %0) {
+; X64-LABEL: <and_i80_3>:
+; X64:         and rdi, 0x3
+; X64-NEXT:    and rsi, 0x0
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <and_i80_3>:
+; ARM64:         mov w2, #0x0 // =0
+; ARM64-NEXT:    and x2, x2, x1
+; ARM64-NEXT:    and x0, x0, #0x3
+; ARM64-NEXT:    ret
+entry:
+    %1 = and i80 %0, 3
+    ret void
+}
+
+define void @and_i80_30000000000000003(i80 %0) {
+; X64-LABEL: <and_i80_30000000000000003>:
+; X64:         and rdi, 0x3
+; X64-NEXT:    and rsi, 0x3
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <and_i80_30000000000000003>:
+; ARM64:         and x1, x1, #0x3
+; ARM64-NEXT:    and x0, x0, #0x3
+; ARM64-NEXT:    ret
+entry:
+    %1 = and i80 %0, u0x30000000000000003
+    ret void
+}
+
+define void @and_i80_90000000000000003(i80 %0) {
+; X64-LABEL: <and_i80_90000000000000003>:
+; X64:         and rdi, 0x3
+; X64-NEXT:    and rsi, 0x9
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <and_i80_90000000000000003>:
+; ARM64:         mov x2, #0x9 // =9
+; ARM64-NEXT:    and x2, x2, x1
+; ARM64-NEXT:    and x0, x0, #0x3
+; ARM64-NEXT:    ret
+entry:
+    %1 = and i80 %0, u0x90000000000000003
+    ret void
+}
+
+define void @and_i80_90000000000000009(i80 %0) {
+; X64-LABEL: <and_i80_90000000000000009>:
+; X64:         and rdi, 0x9
+; X64-NEXT:    and rsi, 0x9
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <and_i80_90000000000000009>:
+; ARM64:         mov x2, #0x9 // =9
+; ARM64-NEXT:    and x2, x2, x1
+; ARM64-NEXT:    mov x1, #0x9 // =9
+; ARM64-NEXT:    and x1, x1, x0
+; ARM64-NEXT:    ret
+entry:
+    %1 = and i80 %0, u0x90000000000000009
+    ret void
+}
+
+define void @and_i80_i80(i80 %0, i80 %1) {
+; X64-LABEL: <and_i80_i80>:
+; X64:         and rdi, rdx
+; X64-NEXT:    and rsi, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <and_i80_i80>:
+; ARM64:         and x3, x3, x1
+; ARM64-NEXT:    and x2, x2, x0
+; ARM64-NEXT:    ret
+entry:
+    %2 = and i80 %0, %1
+    ret void
+}
+
 define void @and_i128_3(i128 %0) {
 ; X64-LABEL: <and_i128_3>:
 ; X64:         and rdi, 0x3
@@ -337,6 +416,29 @@ define void @and_i37_no_salvage_reg(i37 %0, i37 %1) {
 entry:
     %2 = and i37 %0, %1
     %3 = and i37 %0, %2
+    ret void
+}
+
+define void @and_i80_no_salvage_imm(i80 %0) {
+; X64-LABEL: <and_i80_no_salvage_imm>:
+; X64:         mov rax, rdi
+; X64-NEXT:    and rax, 0x3
+; X64-NEXT:    mov rcx, rsi
+; X64-NEXT:    and rcx, 0x0
+; X64-NEXT:    and rdi, rax
+; X64-NEXT:    and rsi, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <and_i80_no_salvage_imm>:
+; ARM64:         mov w2, #0x0 // =0
+; ARM64-NEXT:    and x2, x2, x1
+; ARM64-NEXT:    and x3, x0, #0x3
+; ARM64-NEXT:    and x2, x2, x1
+; ARM64-NEXT:    and x3, x3, x0
+; ARM64-NEXT:    ret
+entry:
+    %1 = and i80 %0, 3
+    %2 = and i80 %0, %1
     ret void
 }
 

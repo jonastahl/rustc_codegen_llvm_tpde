@@ -1,19 +1,18 @@
-From 5d7c709608b01301d4628d2159265936d4440b67 Mon Sep 17 00:00:00 2001
-From: bjorn3 <bjorn3@users.noreply.github.com>
-Date: Thu, 18 Feb 2021 18:45:28 +0100
+From 94d43ada69c6a087e8eeaa514630f4ee4bd0516c Mon Sep 17 00:00:00 2001
+From: Dummy <dummy@example.com>
+Date: Fri, 9 Oct 2026 21:57:32 +0200
 Subject: [PATCH] Disable 128bit atomic operations
 
-Cranelift doesn't support them yet
 ---
- library/core/src/panic/unwind_safe.rs |  6 -----
- library/core/src/sync/atomic.rs       | 38 ---------------------------
- 2 files changed, 44 deletions(-)
+ library/core/src/panic/unwind_safe.rs |  6 ----
+ library/core/src/sync/atomic.rs       | 40 ---------------------------
+ 2 files changed, 46 deletions(-)
 
 diff --git a/library/core/src/panic/unwind_safe.rs b/library/core/src/panic/unwind_safe.rs
-index a60f0799c0e..af056fbf41f 100644
+index bf2e61d..c82d3a0 100644
 --- a/library/core/src/panic/unwind_safe.rs
 +++ b/library/core/src/panic/unwind_safe.rs
-@@ -216,9 +216,6 @@ impl RefUnwindSafe for crate::sync::atomic::AtomicI32 {}
+@@ -217,9 +217,6 @@ impl RefUnwindSafe for crate::sync::atomic::AtomicI32 {}
  #[cfg(target_has_atomic_load_store = "64")]
  #[stable(feature = "integer_atomics_stable", since = "1.34.0")]
  impl RefUnwindSafe for crate::sync::atomic::AtomicI64 {}
@@ -23,7 +22,7 @@ index a60f0799c0e..af056fbf41f 100644
  
  #[cfg(target_has_atomic_load_store = "ptr")]
  #[stable(feature = "unwind_safe_atomic_refs", since = "1.14.0")]
-@@ -235,9 +232,6 @@ impl RefUnwindSafe for crate::sync::atomic::AtomicU32 {}
+@@ -236,9 +233,6 @@ impl RefUnwindSafe for crate::sync::atomic::AtomicU32 {}
  #[cfg(target_has_atomic_load_store = "64")]
  #[stable(feature = "integer_atomics_stable", since = "1.34.0")]
  impl RefUnwindSafe for crate::sync::atomic::AtomicU64 {}
@@ -34,26 +33,27 @@ index a60f0799c0e..af056fbf41f 100644
  #[cfg(target_has_atomic_load_store = "8")]
  #[stable(feature = "unwind_safe_atomic_refs", since = "1.14.0")]
 diff --git a/library/core/src/sync/atomic.rs b/library/core/src/sync/atomic.rs
-index bf2b6d59f88..d5ccce03bbf 100644
+index e676a38..e453396 100644
 --- a/library/core/src/sync/atomic.rs
 +++ b/library/core/src/sync/atomic.rs
-@@ -300,8 +300,6 @@ impl_atomic_primitive!(AtomicI32(i32), size("32"), align(4));
- impl_atomic_primitive!(AtomicU32(u32), size("32"), align(4));
- impl_atomic_primitive!(AtomicI64(i64), size("64"), align(8));
- impl_atomic_primitive!(AtomicU64(u64), size("64"), align(8));
--impl_atomic_primitive!(AtomicI128(i128), size("128"), align(16));
--impl_atomic_primitive!(AtomicU128(u128), size("128"), align(16));
+@@ -341,8 +341,6 @@ impl_atomic_primitive!([] i32 as Align4<i32>, size("32"));
+ impl_atomic_primitive!([] u32 as Align4<u32>, size("32"));
+ impl_atomic_primitive!([] i64 as Align8<i64>, size("64"));
+ impl_atomic_primitive!([] u64 as Align8<u64>, size("64"));
+-impl_atomic_primitive!([] i128 as Align16<i128>, size("128"), doc);
+-impl_atomic_primitive!([] u128 as Align16<u128>, size("128"), doc);
  
  #[cfg(target_pointer_width = "16")]
- impl_atomic_primitive!(AtomicIsize(isize), size("ptr"), align(2));
-@@ -3585,44 +3585,6 @@ pub const fn as_ptr(&self) -> *mut $int_type {
+ impl_atomic_primitive!([] isize as Align2<isize>, size("ptr"));
+@@ -3850,44 +3848,6 @@ atomic_int! {
      8,
      u64 AtomicU64
  }
--#[cfg(target_has_atomic_load_store = "128")]
+-#[cfg(any(target_has_atomic_load_store = "128", doc))]
 -atomic_int! {
--    cfg(target_has_atomic = "128"),
--    cfg(target_has_atomic_equal_alignment = "128"),
+-    target_has_atomic_load_store = "128",
+-    target_has_atomic = "128",
+-    target_has_atomic_primitive_alignment = "128",
 -    unstable(feature = "integer_atomics", issue = "99069"),
 -    unstable(feature = "integer_atomics", issue = "99069"),
 -    unstable(feature = "integer_atomics", issue = "99069"),
@@ -62,17 +62,17 @@ index bf2b6d59f88..d5ccce03bbf 100644
 -    unstable(feature = "integer_atomics", issue = "99069"),
 -    rustc_const_unstable(feature = "integer_atomics", issue = "99069"),
 -    rustc_const_unstable(feature = "integer_atomics", issue = "99069"),
--    rustc_diagnostic_item = "AtomicI128",
 -    "i128",
 -    "#![feature(integer_atomics)]\n\n",
 -    atomic_min, atomic_max,
 -    16,
 -    i128 AtomicI128
 -}
--#[cfg(target_has_atomic_load_store = "128")]
+-#[cfg(any(target_has_atomic_load_store = "128", doc))]
 -atomic_int! {
--    cfg(target_has_atomic = "128"),
--    cfg(target_has_atomic_equal_alignment = "128"),
+-    target_has_atomic_load_store = "128",
+-    target_has_atomic = "128",
+-    target_has_atomic_primitive_alignment = "128",
 -    unstable(feature = "integer_atomics", issue = "99069"),
 -    unstable(feature = "integer_atomics", issue = "99069"),
 -    unstable(feature = "integer_atomics", issue = "99069"),
@@ -81,7 +81,6 @@ index bf2b6d59f88..d5ccce03bbf 100644
 -    unstable(feature = "integer_atomics", issue = "99069"),
 -    rustc_const_unstable(feature = "integer_atomics", issue = "99069"),
 -    rustc_const_unstable(feature = "integer_atomics", issue = "99069"),
--    rustc_diagnostic_item = "AtomicU128",
 -    "u128",
 -    "#![feature(integer_atomics)]\n\n",
 -    atomic_umin, atomic_umax,
@@ -92,5 +91,5 @@ index bf2b6d59f88..d5ccce03bbf 100644
  #[cfg(target_has_atomic_load_store = "ptr")]
  macro_rules! atomic_int_ptr_sized {
 -- 
-2.48.1
+2.55.0
 

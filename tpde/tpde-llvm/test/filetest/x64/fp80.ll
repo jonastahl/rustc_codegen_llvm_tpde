@@ -846,3 +846,36 @@ define x86_fp80 @fmuladd(x86_fp80 %0, x86_fp80 %1, x86_fp80 %2) {
   %res = call x86_fp80 @llvm.fmuladd(x86_fp80 %0, x86_fp80 %1, x86_fp80 %2)
   ret x86_fp80 %res
 }
+
+define x86_fp80 @fabs(x86_fp80 %0) {
+; X64-LABEL: <fabs>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    fld tbyte ptr [rbp + 0x10]
+; X64-NEXT:    fabs
+; X64-NEXT:    fstp tbyte ptr [rbp - 0x40]
+; X64-NEXT:    fld tbyte ptr [rbp - 0x40]
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+  %res = call x86_fp80 @llvm.fabs(x86_fp80 %0)
+  ret x86_fp80 %res
+}
+
+define x86_fp80 @log(x86_fp80 %0) {
+; X64-LABEL: <log>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    sub rsp, 0x50
+; X64-NEXT:    movapd xmm0, xmmword ptr [rbp + 0x10]
+; X64-NEXT:    movdqa xmmword ptr [rsp], xmm0
+; X64-NEXT:    call <L0>
+; X64-NEXT:     R_X86_64_PLT32 logl-0x4
+; X64-NEXT:  <L0>:
+; X64-NEXT:    fstp tbyte ptr [rbp - 0x40]
+; X64-NEXT:    fld tbyte ptr [rbp - 0x40]
+; X64-NEXT:    add rsp, 0x50
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+  %res = call x86_fp80 @llvm.log(x86_fp80 %0)
+  ret x86_fp80 %res
+}

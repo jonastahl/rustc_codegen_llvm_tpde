@@ -44,11 +44,14 @@ define fp128 @fabsf128(fp128 %v) {
 ; X64-NEXT:    ret
 ;
 ; ARM64-LABEL: <fabsf128>:
-; ARM64:         str q0, [sp, #-0x10]!
+; ARM64:         stp x29, x30, [sp, #-0xa0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    str q0, [sp, #-0x10]!
 ; ARM64-NEXT:    ldrb w0, [sp, #0xf]
 ; ARM64-NEXT:    and w0, w0, #0x7f
 ; ARM64-NEXT:    strb w0, [sp, #0xf]
 ; ARM64-NEXT:    ldr q0, [sp], #0x10
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xa0
 ; ARM64-NEXT:    ret
   %r = call fp128 @llvm.fabs(fp128 %v)
   ret fp128 %r

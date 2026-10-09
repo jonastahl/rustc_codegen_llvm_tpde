@@ -631,7 +631,6 @@ void CompilerBase<Adaptor, Derived, Config>::CallBuilderBase<
     }
     vp.reset(&compiler);
   } else {
-    u32 size = vp.part_size();
     if (vp.is_in_reg(cca.reg)) {
       if (!vp.can_salvage()) {
         compiler.evict_reg(cca.reg);
@@ -650,7 +649,7 @@ void CompilerBase<Adaptor, Derived, Config>::CallBuilderBase<
         if (needs_ext) {
           compiler.generate_raw_intext(cca.reg, vp_reg, ext_sign, ext_bits, 64);
         } else {
-          compiler.mov(cca.reg, vp_reg, size);
+          compiler.mov(cca.reg, vp_reg, cca.size);
         }
       } else if (needs_ext && vp.is_const()) {
         u64 val = vp.const_data()[0];

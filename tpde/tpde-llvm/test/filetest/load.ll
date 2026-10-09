@@ -464,6 +464,594 @@ entry:
 }
 
 
+define i72 @load_i72(ptr %a) {
+; X64-LABEL: <load_i72>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, byte ptr [rdi + 0x8]
+; X64-NEXT:    mov rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i72>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0x8]
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x2
+; ARM64-NEXT:    ret
+entry:
+  %b = load i72, ptr %a, align 8
+  ret i72 %b
+}
+
+define i72 @load_i72_alloca() {
+; X64-LABEL: <load_i72_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov rcx, qword ptr [rax]
+; X64-NEXT:    movzx edx, byte ptr [rax + 0x8]
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i72_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x0, x29, #0xa0
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0x8]
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x2
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+   %0 = alloca i72
+   %1 = load i72, ptr %0
+   ret i72 %1
+}
+
+define i72 @load_i72_alt(ptr %a) {
+; X64-LABEL: <load_i72_alt>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, byte ptr [rdi + 0x8]
+; X64-NEXT:    mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, byte ptr [rdi + 0x8]
+; X64-NEXT:    mov rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i72_alt>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0x8]
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0x8]
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x2
+; ARM64-NEXT:    ret
+entry:
+  %b = load i72, ptr %a, align 8
+  %c = load i72, ptr %a, align 8
+  ret i72 %c
+}
+
+
+define i80 @load_i80(ptr %a) {
+; X64-LABEL: <load_i80>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, word ptr [rdi + 0x8]
+; X64-NEXT:    mov rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i80>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrh w2, [x0, #0x8]
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x2
+; ARM64-NEXT:    ret
+entry:
+  %b = load i80, ptr %a, align 8
+  ret i80 %b
+}
+
+define i80 @load_i80_alloca() {
+; X64-LABEL: <load_i80_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov rcx, qword ptr [rax]
+; X64-NEXT:    movzx edx, word ptr [rax + 0x8]
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i80_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x0, x29, #0xa0
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrh w2, [x0, #0x8]
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x2
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+   %0 = alloca i80
+   %1 = load i80, ptr %0
+   ret i80 %1
+}
+
+define i80 @load_i80_alt(ptr %a) {
+; X64-LABEL: <load_i80_alt>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, word ptr [rdi + 0x8]
+; X64-NEXT:    mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, word ptr [rdi + 0x8]
+; X64-NEXT:    mov rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i80_alt>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrh w2, [x0, #0x8]
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrh w2, [x0, #0x8]
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x2
+; ARM64-NEXT:    ret
+entry:
+  %b = load i80, ptr %a, align 8
+  %c = load i80, ptr %a, align 8
+  ret i80 %c
+}
+
+
+define i88 @load_i88(ptr %a) {
+; X64-LABEL: <load_i88>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, word ptr [rdi + 0x8]
+; X64-NEXT:    movzx edx, byte ptr [rdi + 0xa]
+; X64-NEXT:    shl edx, 0x10
+; X64-NEXT:    or edx, ecx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i88>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xa]
+; ARM64-NEXT:    ldrh w3, [x0, #0x8]
+; ARM64-NEXT:    orr w4, w3, w2, lsl #16
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ret
+entry:
+  %b = load i88, ptr %a, align 8
+  ret i88 %b
+}
+
+define i88 @load_i88_alloca() {
+; X64-LABEL: <load_i88_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    push rbx
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov rcx, qword ptr [rax]
+; X64-NEXT:    movzx edx, word ptr [rax + 0x8]
+; X64-NEXT:    movzx ebx, byte ptr [rax + 0xa]
+; X64-NEXT:    shl ebx, 0x10
+; X64-NEXT:    or ebx, edx
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    mov rdx, rbx
+; X64-NEXT:    pop rbx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i88_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x0, x29, #0xa0
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xa]
+; ARM64-NEXT:    ldrh w3, [x0, #0x8]
+; ARM64-NEXT:    orr w4, w3, w2, lsl #16
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+   %0 = alloca i88
+   %1 = load i88, ptr %0
+   ret i88 %1
+}
+
+define i88 @load_i88_alt(ptr %a) {
+; X64-LABEL: <load_i88_alt>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, word ptr [rdi + 0x8]
+; X64-NEXT:    movzx edx, byte ptr [rdi + 0xa]
+; X64-NEXT:    shl edx, 0x10
+; X64-NEXT:    or edx, ecx
+; X64-NEXT:    mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, word ptr [rdi + 0x8]
+; X64-NEXT:    movzx edx, byte ptr [rdi + 0xa]
+; X64-NEXT:    shl edx, 0x10
+; X64-NEXT:    or edx, ecx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i88_alt>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xa]
+; ARM64-NEXT:    ldrh w3, [x0, #0x8]
+; ARM64-NEXT:    orr w4, w3, w2, lsl #16
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xa]
+; ARM64-NEXT:    ldrh w3, [x0, #0x8]
+; ARM64-NEXT:    orr w4, w3, w2, lsl #16
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ret
+entry:
+  %b = load i88, ptr %a, align 8
+  %c = load i88, ptr %a, align 8
+  ret i88 %c
+}
+
+
+define i96 @load_i96(ptr %a) {
+; X64-LABEL: <load_i96>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    mov rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i96>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldr w2, [x0, #0x8]
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x2
+; ARM64-NEXT:    ret
+entry:
+  %b = load i96, ptr %a, align 8
+  ret i96 %b
+}
+
+define i96 @load_i96_alloca() {
+; X64-LABEL: <load_i96_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov rcx, qword ptr [rax]
+; X64-NEXT:    mov edx, dword ptr [rax + 0x8]
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i96_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x0, x29, #0xa0
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldr w2, [x0, #0x8]
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x2
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+   %0 = alloca i96
+   %1 = load i96, ptr %0
+   ret i96 %1
+}
+
+define i96 @load_i96_alt(ptr %a) {
+; X64-LABEL: <load_i96_alt>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    mov rax, qword ptr [rdi]
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    mov rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i96_alt>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldr w2, [x0, #0x8]
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldr w2, [x0, #0x8]
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x2
+; ARM64-NEXT:    ret
+entry:
+  %b = load i96, ptr %a, align 8
+  %c = load i96, ptr %a, align 8
+  ret i96 %c
+}
+
+
+define i104 @load_i104(ptr %a) {
+; X64-LABEL: <load_i104>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    movzx edx, byte ptr [rdi + 0xc]
+; X64-NEXT:    shl rdx, 0x20
+; X64-NEXT:    or rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i104>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xc]
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ret
+entry:
+  %b = load i104, ptr %a, align 8
+  ret i104 %b
+}
+
+define i104 @load_i104_alloca() {
+; X64-LABEL: <load_i104_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    push rbx
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov rcx, qword ptr [rax]
+; X64-NEXT:    mov edx, dword ptr [rax + 0x8]
+; X64-NEXT:    movzx ebx, byte ptr [rax + 0xc]
+; X64-NEXT:    shl rbx, 0x20
+; X64-NEXT:    or rbx, rdx
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    mov rdx, rbx
+; X64-NEXT:    pop rbx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i104_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x0, x29, #0xa0
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xc]
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+   %0 = alloca i104
+   %1 = load i104, ptr %0
+   ret i104 %1
+}
+
+define i104 @load_i104_alt(ptr %a) {
+; X64-LABEL: <load_i104_alt>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    movzx edx, byte ptr [rdi + 0xc]
+; X64-NEXT:    shl rdx, 0x20
+; X64-NEXT:    or rdx, rcx
+; X64-NEXT:    mov rax, qword ptr [rdi]
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    movzx edx, byte ptr [rdi + 0xc]
+; X64-NEXT:    shl rdx, 0x20
+; X64-NEXT:    or rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i104_alt>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xc]
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xc]
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ret
+entry:
+  %b = load i104, ptr %a, align 8
+  %c = load i104, ptr %a, align 8
+  ret i104 %c
+}
+
+
+define i112 @load_i112(ptr %a) {
+; X64-LABEL: <load_i112>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    movzx edx, word ptr [rdi + 0xc]
+; X64-NEXT:    shl rdx, 0x20
+; X64-NEXT:    or rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i112>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrh w2, [x0, #0xc]
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ret
+entry:
+  %b = load i112, ptr %a, align 8
+  ret i112 %b
+}
+
+define i112 @load_i112_alloca() {
+; X64-LABEL: <load_i112_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    push rbx
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov rcx, qword ptr [rax]
+; X64-NEXT:    mov edx, dword ptr [rax + 0x8]
+; X64-NEXT:    movzx ebx, word ptr [rax + 0xc]
+; X64-NEXT:    shl rbx, 0x20
+; X64-NEXT:    or rbx, rdx
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    mov rdx, rbx
+; X64-NEXT:    pop rbx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i112_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x0, x29, #0xa0
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrh w2, [x0, #0xc]
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+   %0 = alloca i112
+   %1 = load i112, ptr %0
+   ret i112 %1
+}
+
+define i112 @load_i112_alt(ptr %a) {
+; X64-LABEL: <load_i112_alt>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    movzx edx, word ptr [rdi + 0xc]
+; X64-NEXT:    shl rdx, 0x20
+; X64-NEXT:    or rdx, rcx
+; X64-NEXT:    mov rax, qword ptr [rdi]
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    movzx edx, word ptr [rdi + 0xc]
+; X64-NEXT:    shl rdx, 0x20
+; X64-NEXT:    or rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i112_alt>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrh w2, [x0, #0xc]
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrh w2, [x0, #0xc]
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ret
+entry:
+  %b = load i112, ptr %a, align 8
+  %c = load i112, ptr %a, align 8
+  ret i112 %c
+}
+
+
+define i120 @load_i120(ptr %a) {
+; X64-LABEL: <load_i120>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, word ptr [rdi + 0xc]
+; X64-NEXT:    movzx edx, byte ptr [rdi + 0xe]
+; X64-NEXT:    shl edx, 0x10
+; X64-NEXT:    or edx, ecx
+; X64-NEXT:    shl rdx, 0x20
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    or rcx, rdx
+; X64-NEXT:    mov rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i120>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xe]
+; ARM64-NEXT:    ldrh w3, [x0, #0xc]
+; ARM64-NEXT:    orr w2, w3, w2, lsl #16
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ret
+entry:
+  %b = load i120, ptr %a, align 8
+  ret i120 %b
+}
+
+define i120 @load_i120_alloca() {
+; X64-LABEL: <load_i120_alloca>:
+; X64:         push rbp
+; X64-NEXT:    mov rbp, rsp
+; X64-NEXT:    push rbx
+; X64-NEXT:    lea rax, [rbp - 0x40]
+; X64-NEXT:    mov rcx, qword ptr [rax]
+; X64-NEXT:    movzx edx, word ptr [rax + 0xc]
+; X64-NEXT:    movzx ebx, byte ptr [rax + 0xe]
+; X64-NEXT:    shl ebx, 0x10
+; X64-NEXT:    or ebx, edx
+; X64-NEXT:    shl rbx, 0x20
+; X64-NEXT:    mov edx, dword ptr [rax + 0x8]
+; X64-NEXT:    or rdx, rbx
+; X64-NEXT:    mov rax, rcx
+; X64-NEXT:    pop rbx
+; X64-NEXT:    pop rbp
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i120_alloca>:
+; ARM64:         stp x29, x30, [sp, #-0xb0]!
+; ARM64-NEXT:    mov x29, sp
+; ARM64-NEXT:    add x0, x29, #0xa0
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xe]
+; ARM64-NEXT:    ldrh w3, [x0, #0xc]
+; ARM64-NEXT:    orr w2, w3, w2, lsl #16
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ldp x29, x30, [sp], #0xb0
+; ARM64-NEXT:    ret
+entry:
+   %0 = alloca i120
+   %1 = load i120, ptr %0
+   ret i120 %1
+}
+
+define i120 @load_i120_alt(ptr %a) {
+; X64-LABEL: <load_i120_alt>:
+; X64:         mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, word ptr [rdi + 0xc]
+; X64-NEXT:    movzx edx, byte ptr [rdi + 0xe]
+; X64-NEXT:    shl edx, 0x10
+; X64-NEXT:    or edx, ecx
+; X64-NEXT:    shl rdx, 0x20
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    or rcx, rdx
+; X64-NEXT:    mov rax, qword ptr [rdi]
+; X64-NEXT:    movzx ecx, word ptr [rdi + 0xc]
+; X64-NEXT:    movzx edx, byte ptr [rdi + 0xe]
+; X64-NEXT:    shl edx, 0x10
+; X64-NEXT:    or edx, ecx
+; X64-NEXT:    shl rdx, 0x20
+; X64-NEXT:    mov ecx, dword ptr [rdi + 0x8]
+; X64-NEXT:    or rcx, rdx
+; X64-NEXT:    mov rdx, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <load_i120_alt>:
+; ARM64:         ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xe]
+; ARM64-NEXT:    ldrh w3, [x0, #0xc]
+; ARM64-NEXT:    orr w2, w3, w2, lsl #16
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    ldr x1, [x0]
+; ARM64-NEXT:    ldrb w2, [x0, #0xe]
+; ARM64-NEXT:    ldrh w3, [x0, #0xc]
+; ARM64-NEXT:    orr w2, w3, w2, lsl #16
+; ARM64-NEXT:    ldr w3, [x0, #0x8]
+; ARM64-NEXT:    orr x4, x3, x2, lsl #32
+; ARM64-NEXT:    mov x0, x1
+; ARM64-NEXT:    mov x1, x4
+; ARM64-NEXT:    ret
+entry:
+  %b = load i120, ptr %a, align 8
+  %c = load i120, ptr %a, align 8
+  ret i120 %c
+}
+
+
 define i128 @load_i128(ptr %a) {
 ; X64-LABEL: <load_i128>:
 ; X64:         mov rax, qword ptr [rdi]

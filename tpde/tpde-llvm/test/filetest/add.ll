@@ -356,6 +356,86 @@ define void @add_i64_1001_reorder(i64 %0) {
     ret void
 }
 
+define void @add_i80_1(i80 %0) {
+; X64-LABEL: <add_i80_1>:
+; X64:         add rdi, 0x1
+; X64-NEXT:    adc rsi, 0x0
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <add_i80_1>:
+; ARM64:         adds x0, x0, #0x1
+; ARM64-NEXT:    mov w2, #0x0 // =0
+; ARM64-NEXT:    adc x2, x2, x1
+; ARM64-NEXT:    ret
+  entry:
+    %1 = add nsw i80 %0, 1
+    ret void
+}
+
+define void @add_i80_invert(i80 %0) {
+; X64-LABEL: <add_i80_invert>:
+; X64:         add rdi, -0x1
+; X64-NEXT:    adc rsi, 0xffff
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <add_i80_invert>:
+; ARM64:         subs x0, x0, #0x1
+; ARM64-NEXT:    mov x2, #0xffff // =65535
+; ARM64-NEXT:    adc x2, x2, x1
+; ARM64-NEXT:    ret
+  entry:
+    %1 = add nsw i80 %0, -1
+    ret void
+}
+
+define void @add_i80_1_reorder(i80 %0) {
+; X64-LABEL: <add_i80_1_reorder>:
+; X64:         add rdi, 0x1
+; X64-NEXT:    adc rsi, 0x0
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <add_i80_1_reorder>:
+; ARM64:         adds x0, x0, #0x1
+; ARM64-NEXT:    mov w2, #0x0 // =0
+; ARM64-NEXT:    adc x2, x2, x1
+; ARM64-NEXT:    ret
+  entry:
+    %1 = add nsw i80 1, %0
+    ret void
+}
+
+define void @add_i80_1001_1001(i80 %0) {
+; X64-LABEL: <add_i80_1001_1001>:
+; X64:         add rdi, 0x1001
+; X64-NEXT:    adc rsi, 0x1001
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <add_i80_1001_1001>:
+; ARM64:         mov x2, #0x1001 // =4097
+; ARM64-NEXT:    adds x2, x2, x0
+; ARM64-NEXT:    mov x0, #0x1001 // =4097
+; ARM64-NEXT:    adc x0, x0, x1
+; ARM64-NEXT:    ret
+  entry:
+    %1 = add nsw i80 %0, u0x10010000000000001001
+    ret void
+}
+
+define void @add_i80_i80(i80 %0, i80 %1) {
+; X64-LABEL: <add_i80_i80>:
+; X64:         add rdi, rdx
+; X64-NEXT:    adc rsi, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <add_i80_i80>:
+; ARM64:         adds x2, x2, x0
+; ARM64-NEXT:    adc x3, x3, x1
+; ARM64-NEXT:    ret
+  entry:
+    %2 = add nsw i80 %0, %1
+    ret void
+}
+
 define void @add_i128_1(i128 %0) {
 ; X64-LABEL: <add_i128_1>:
 ; X64:         add rdi, 0x1
@@ -494,6 +574,37 @@ entry:
     ret void
 }
 
+define void @add_i80_salvage_imm(i80 %0) {
+; X64-LABEL: <add_i80_salvage_imm>:
+; X64:         add rdi, 0x1
+; X64-NEXT:    adc rsi, 0x0
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <add_i80_salvage_imm>:
+; ARM64:         adds x0, x0, #0x1
+; ARM64-NEXT:    mov w2, #0x0 // =0
+; ARM64-NEXT:    adc x2, x2, x1
+; ARM64-NEXT:    ret
+  entry:
+  %1 = add nsw i80 %0, 1
+  ret void
+}
+
+define void @add_i80_salvage_reg(i80 %0, i80 %1) {
+; X64-LABEL: <add_i80_salvage_reg>:
+; X64:         add rdi, rdx
+; X64-NEXT:    adc rsi, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <add_i80_salvage_reg>:
+; ARM64:         adds x2, x2, x0
+; ARM64-NEXT:    adc x3, x3, x1
+; ARM64-NEXT:    ret
+  entry:
+  %2 = add nsw i80 %0, %1
+  ret void
+}
+
 define void @add_i128_salvage_imm(i128 %0) {
 ; X64-LABEL: <add_i128_salvage_imm>:
 ; X64:         add rdi, 0x1
@@ -557,6 +668,80 @@ define void @add_i64_no_salvage_reg(i64 %0, i64 %1) {
   ret void
 }
 
+
+define void @add_i80_no_salvage_imm(i80 %0) {
+; X64-LABEL: <add_i80_no_salvage_imm>:
+; X64:         mov rax, rdi
+; X64-NEXT:    add rax, 0x1
+; X64-NEXT:    mov rcx, rsi
+; X64-NEXT:    adc rcx, 0x0
+; X64-NEXT:    add rdi, rax
+; X64-NEXT:    adc rsi, rcx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <add_i80_no_salvage_imm>:
+; ARM64:         adds x2, x0, #0x1
+; ARM64-NEXT:    mov w3, #0x0 // =0
+; ARM64-NEXT:    adc x3, x3, x1
+; ARM64-NEXT:    adds x2, x2, x0
+; ARM64-NEXT:    adc x3, x3, x1
+; ARM64-NEXT:    ret
+  entry:
+  %1 = add nsw i80 %0, 1
+  %2 = add nsw i80 %0, %1
+  ret void
+}
+
+define void @add_i80_no_salvage_reg(i80 %0, i80 %1) {
+; X64-LABEL: <add_i80_no_salvage_reg>:
+; X64:         mov rax, rdi
+; X64-NEXT:    add rax, rdx
+; X64-NEXT:    mov rdx, rsi
+; X64-NEXT:    adc rdx, rcx
+; X64-NEXT:    add rdi, rax
+; X64-NEXT:    adc rsi, rdx
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <add_i80_no_salvage_reg>:
+; ARM64:         adds x2, x2, x0
+; ARM64-NEXT:    adc x3, x3, x1
+; ARM64-NEXT:    adds x2, x2, x0
+; ARM64-NEXT:    adc x3, x3, x1
+; ARM64-NEXT:    ret
+  entry:
+  %2 = add nsw i80 %0, %1
+  %3 = add nsw i80 %0, %2
+  ret void
+}
+
+define void @add_i80_no_salvage_reg2(i80 %0, i80 %1) {
+; X64-LABEL: <add_i80_no_salvage_reg2>:
+; X64:         mov rax, rdi
+; X64-NEXT:    add rax, rdx
+; X64-NEXT:    mov rdx, rsi
+; X64-NEXT:    adc rdx, rcx
+; X64-NEXT:    mov rcx, rdi
+; X64-NEXT:    add rcx, rax
+; X64-NEXT:    mov rax, rsi
+; X64-NEXT:    adc rax, rdx
+; X64-NEXT:    add rdi, rcx
+; X64-NEXT:    adc rsi, rax
+; X64-NEXT:    ret
+;
+; ARM64-LABEL: <add_i80_no_salvage_reg2>:
+; ARM64:         adds x2, x2, x0
+; ARM64-NEXT:    adc x3, x3, x1
+; ARM64-NEXT:    adds x2, x2, x0
+; ARM64-NEXT:    adc x3, x3, x1
+; ARM64-NEXT:    adds x2, x2, x0
+; ARM64-NEXT:    adc x3, x3, x1
+; ARM64-NEXT:    ret
+  entry:
+  %2 = add nsw i80 %0, %1
+  %3 = add nsw i80 %0, %2
+  %4 = add nsw i80 %0, %3
+  ret void
+}
 
 define void @add_i128_no_salvage_imm(i128 %0) {
 ; X64-LABEL: <add_i128_no_salvage_imm>:
@@ -631,4 +816,3 @@ define void @add_i128_no_salvage_reg2(i128 %0, i128 %1) {
   %4 = add nsw i128 %0, %3
   ret void
 }
-

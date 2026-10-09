@@ -1040,6 +1040,8 @@ void EncodingTargetX64::get_inst_candidates(
     handle_default("PREFETCHT1m", 0);
   } else if (Name == "PREFETCHT0") {
     handle_default("PREFETCHT0m", 0);
+  } else if (Name == "FNSTCW16m") {
+    handle_default("FSTCWm", 0);
   } else if (Name == "TRAP") {
     handle_default("UD2");
   } else if (Name == "INT3") {

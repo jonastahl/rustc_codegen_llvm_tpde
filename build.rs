@@ -380,14 +380,24 @@ fn main() {
     }
 
     // Build TPDE
-    let mut cmd = Command::new(&llvm_config);
-    cmd.arg("--cmakedir");
-    let llvm_cmake_dir = output(&mut cmd);
+    // Not every LLVM distribution (e.g. rustc's ci-llvm) ships CMake config files, so allow
+    // pointing TPDE at a different LLVM CMake directory of the same version.
+    let llvm_cmake_dir = match tracked_env_var_os("TPDE_LLVM_DIR") {
+        Some(dir) => dir.into_string().unwrap(),
+        None => {
+            let mut cmd = Command::new(&llvm_config);
+            cmd.arg("--cmakedir");
+            output(&mut cmd)
+        }
+    };
     #[cfg(debug_assertions)]
     let build_type = "DEBUG";
     #[cfg(not(debug_assertions))]
     let build_type = "RELEASE";
+    // The build-time tools (tpde-encodegen) need to find LLVM's shared library.
+    let llvm_lib_dir = output(Command::new(&llvm_config).arg("--libdir"));
     let tpde_dst = cmake::Config::new("tpde")
+        .define("CMAKE_BUILD_RPATH", llvm_lib_dir.trim())
         .define("LLVM_DIR", llvm_cmake_dir.trim())
         .define("CMAKE_CXX_COMPILER", "clang++")
         .define("CMAKE_C_COMPILER", "clang")
